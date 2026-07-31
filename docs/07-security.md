@@ -84,10 +84,10 @@ formal proof; see the
 
 ## Known gaps / limitations
 
-- **No DKG.** Key generation is trusted-dealer only. There is no distributed
-  key generation protocol in this port yet.
 - **No identifier derivation.** `HID`/`HDKG` are exposed as ciphersuite hash
   functions but the derivation API is not wired up.
+- **1-round signing not wired up.** `round1.preprocess` can pre-generate
+  nonces, but the 1-round protocol itself is not exposed.
 - The library does not implement side-channel hardening beyond what Zig's
   stdlib `Secp256k1` provides; deployment on devices should be reviewed
   against the local threat model.
