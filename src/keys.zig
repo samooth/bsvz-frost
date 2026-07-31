@@ -58,6 +58,12 @@ pub const VerifyingShare = struct {
         const element = group.elementScalarBaseMul(signing_share.scalar);
         return VerifyingShare{ .element = element };
     }
+
+    /// Compute the public verification share Y_i = ∏_k φ_k^{i^k} from a group
+    /// commitment (the sum of all participants' DKG commitments).
+    pub fn fromCommitment(identifier: Identifier, commitment: VerifiableSecretSharingCommitment) VerifyingShare {
+        return VerifyingShare{ .element = evaluateVss(identifier, commitment) };
+    }
 };
 
 /// Commitment to one coefficient of the secret polynomial.
@@ -147,7 +153,64 @@ pub const PublicKeyPackage = struct {
     pub fn maxSigners(self: PublicKeyPackage) u16 {
         return @intCast(self.verifying_shares.count());
     }
+
+    /// Build the public key package from the DKG commitments of all
+    /// participants (each mapped by their identifier). The group verifying
+    /// key is the sum of every participant's first commitment, and each
+    /// verifying share is derived by evaluating the summed commitment.
+    pub fn fromDkgCommitments(
+        allocator: std.mem.Allocator,
+        commitments: *const std.AutoHashMap(Identifier, *const VerifiableSecretSharingCommitment),
+    ) !PublicKeyPackage {
+        var ids = std.ArrayList(Identifier).empty;
+        defer ids.deinit(allocator);
+        var it = commitments.keyIterator();
+        while (it.next()) |id| {
+            try ids.append(allocator, id.*);
+        }
+        std.mem.sort(Identifier, ids.items, {}, idLessThan);
+
+        var commit_list = std.ArrayList(VerifiableSecretSharingCommitment).empty;
+        defer commit_list.deinit(allocator);
+        for (ids.items) |id| {
+            try commit_list.append(allocator, commitments.get(id).?.*);
+        }
+        const group_commitment = try sumCommitments(commit_list.items);
+        defer std.heap.page_allocator.free(group_commitment.coefficients);
+
+        var verifying_shares = std.AutoHashMap(Identifier, VerifyingShare).init(allocator);
+        errdefer verifying_shares.deinit();
+        for (ids.items) |id| {
+            try verifying_shares.put(id, VerifyingShare.fromCommitment(id, group_commitment));
+        }
+        return PublicKeyPackage{
+            .verifying_shares = verifying_shares,
+            .verifying_key = try group_commitment.verifyingKey(),
+            .min_signers = group_commitment.minSigners(),
+        };
+    }
 };
+
+fn idLessThan(_: void, a: Identifier, b: Identifier) bool {
+    return a.lessThan(b);
+}
+
+/// Sum the coefficient commitments from all participants into one group
+/// commitment. Each coefficient position is added element-wise.
+pub fn sumCommitments(commitments: []const VerifiableSecretSharingCommitment) !VerifiableSecretSharingCommitment {
+    if (commitments.len == 0) return FrostError.IncorrectNumberOfCommitments;
+    const degree = commitments[0].coefficients.len;
+    var summed = std.heap.page_allocator.alloc(CoefficientCommitment, degree) catch return FrostError.RandomnessError;
+    for (0..degree) |k| {
+        var acc = group.identity();
+        for (commitments) |comm| {
+            if (comm.coefficients.len != degree) return FrostError.IncorrectNumberOfCommitments;
+            acc = group.elementAdd(acc, comm.coefficients[k].value());
+        }
+        summed[k] = CoefficientCommitment.fromElement(acc);
+    }
+    return VerifiableSecretSharingCommitment.init(summed);
+}
 
 /// A signing key (the group secret).
 pub const SigningKey = struct {
@@ -245,7 +308,7 @@ pub fn challenge(R: *const Element, verifying_key: *const VerifyingKey, msg: []c
 }
 
 /// Evaluate polynomial at identifier using Horner's method.
-fn evaluatePolynomial(identifier: Identifier, coefficients: []const Scalar) Scalar {
+pub fn evaluatePolynomial(identifier: Identifier, coefficients: []const Scalar) Scalar {
     var value = field.scalarZero();
     const id_scalar = field.scalarDeserialize(identifier.serialize()) catch field.scalarZero();
     var i: usize = coefficients.len;
@@ -259,7 +322,7 @@ fn evaluatePolynomial(identifier: Identifier, coefficients: []const Scalar) Scal
 }
 
 /// Evaluate VSS verification equation.
-fn evaluateVss(identifier: Identifier, commitment: VerifiableSecretSharingCommitment) Element {
+pub fn evaluateVss(identifier: Identifier, commitment: VerifiableSecretSharingCommitment) Element {
     const id_scalar = field.scalarDeserialize(identifier.serialize()) catch field.scalarZero();
     var i_to_the_k = field.scalarOne();
     var sum = group.identity();
@@ -271,7 +334,7 @@ fn evaluateVss(identifier: Identifier, commitment: VerifiableSecretSharingCommit
 }
 
 /// Generate random polynomial coefficients.
-fn generateCoefficients(min_signers: u16) []Scalar {
+pub fn generateCoefficients(min_signers: u16) []Scalar {
     var coeffs = std.heap.page_allocator.alloc(Scalar, min_signers) catch return &[_]Scalar{};
     for (0..min_signers) |i| {
         coeffs[i] = field.scalarRandom();
@@ -280,7 +343,7 @@ fn generateCoefficients(min_signers: u16) []Scalar {
 }
 
 /// Generate secret polynomial and commitment.
-fn generateSecretPolynomial(secret: SigningKey, max_signers: u16, min_signers: u16, coefficients: []Scalar) !struct { []Scalar, VerifiableSecretSharingCommitment } {
+pub fn generateSecretPolynomial(secret: SigningKey, max_signers: u16, min_signers: u16, coefficients: []Scalar) !struct { []Scalar, VerifiableSecretSharingCommitment } {
     if (min_signers < 2 or max_signers < 2 or min_signers > max_signers) {
         return FrostError.InvalidMinSigners;
     }

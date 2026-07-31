@@ -96,6 +96,28 @@ pub fn build(b: *std.Build) void {
     const run_security_tests = b.addRunArtifact(security_tests);
     test_step.dependOn(&run_security_tests.step);
 
+    // Distributed key generation tests
+    const dkg_mod = b.createModule(.{
+        .root_source_file = b.path("tests/dkg_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    dkg_mod.addImport("bsvz-frost", frost_mod);
+    const dkg_tests = b.addTest(.{ .root_module = dkg_mod });
+    const run_dkg_tests = b.addRunArtifact(dkg_tests);
+    test_step.dependOn(&run_dkg_tests.step);
+
+    // Interop test against official ZcashFoundation/frost-secp256k1 DKG vectors
+    const dkg_vector_mod = b.createModule(.{
+        .root_source_file = b.path("tests/dkg_vector_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    dkg_vector_mod.addImport("bsvz-frost", frost_mod);
+    const dkg_vector_tests = b.addTest(.{ .root_module = dkg_vector_mod });
+    const run_dkg_vector_tests = b.addRunArtifact(dkg_vector_tests);
+    test_step.dependOn(&run_dkg_vector_tests.step);
+
     // Fuzz targets (smoke-run under `zig build test`; fuzzed via
     // `zig build --fuzz=NNN` or `zig build --fuzz`)
     const fuzz_mod = b.createModule(.{

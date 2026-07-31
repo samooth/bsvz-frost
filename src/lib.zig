@@ -40,6 +40,9 @@ pub const PublicKeyPackage = keys.PublicKeyPackage;
 pub const VerifiableSecretSharingCommitment = keys.VerifiableSecretSharingCommitment;
 pub const CoefficientCommitment = keys.CoefficientCommitment;
 
+// Distributed key generation (FROST KeyGen)
+pub const dkg = @import("dkg.zig");
+
 // Round 1
 pub const round1 = @import("round1.zig");
 pub const Nonce = round1.Nonce;

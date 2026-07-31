@@ -101,7 +101,7 @@ What the Zcash audit covers, and what it does not:
 | FROST protocol design (RFC 9591) | Audited (by the Zcash Foundation's audit of the reference) |
 | This port's byte-level correctness | Verified against official Zcash test vectors |
 | This port's implementation security | **Un-audited** |
-| DKG | **Missing** — trusted-dealer keygen only |
+| DKG | Implemented and byte-verified against the official `vectors_dkg.json` (un-audited like the rest of the port) |
 | Side-channel hardening | Not reviewed; stdlib `Secp256k1` is not guaranteed constant-time |
 | Fuzzing / malformed-input testing | Fuzz targets written; coverage-guided run blocked by a build-runner bug on the current Zig dev toolchain (smoke-run in `zig build test`) |
 | Misuse-resistance tests (nonce reuse, etc.) | Present — 18 negative/property tests in `tests/security_test.zig` |
@@ -109,9 +109,10 @@ What the Zcash audit covers, and what it does not:
 
 Minimum bar before real keys/funds:
 1. Independent security review of this Zig code.
-2. Add DKG (or a documented, operationally sound trusted-dealer procedure).
-3. Fuzzing and property tests (e.g. aggregate rejects wrong-subsets, shares
+2. Fuzzing and property tests (e.g. aggregate rejects wrong-subsets, shares
    verify, nonce reuse is caught). The negative/property suite ships now;
    run coverage-guided fuzzing once the toolchain's `--fuzz` bug is fixed.
-4. Move to a stable Zig release and re-verify the vectors.
-5. Review side-channel posture against the deployment's threat model.
+3. Move to a stable Zig release and re-verify the vectors.
+4. Review side-channel posture against the deployment's threat model.
+5. Exercise the DKG operational procedures (channel authentication, share
+   deletion) against the deployment's threat model.

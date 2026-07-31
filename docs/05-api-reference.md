@@ -16,7 +16,9 @@ IdentityCommitment, InvalidSecretShare, InvalidSignatureShare,
 InvalidSignature, MalformedScalar, MalformedElement, MalformedSigningKey,
 InvalidZeroScalar, InvalidIdentityElement, InvalidCoefficient,
 SerializationFailed, DeserializationFailed, DkgNotSupported,
-IdentifierDerivationNotSupported, RandomnessError, InvalidNonce
+IdentifierDerivationNotSupported, RandomnessError, InvalidNonce,
+IncorrectNumberOfPackages, IncorrectPackage, PackageNotFound,
+InvalidProofOfKnowledge
 ```
 
 ## `Identifier`
@@ -119,6 +121,7 @@ Built on `bsvz.crypto.Point`. No binding factors, no identifiable abort —
 ### PublicKeyPackage
 - `{ verifying_shares: AutoHashMap(Identifier, VerifyingShare), verifying_key, min_signers: ?u16 }`
 - `maxSigners() u16`
+- `fromDkgCommitments(allocator, commitments: *AutoHashMap(Identifier, *const VerifiableSecretSharingCommitment)) !PublicKeyPackage`
 
 ### SigningKey
 - `generate() SigningKey`
@@ -140,6 +143,33 @@ Built on `bsvz.crypto.Point`. No binding factors, no identifiable abort —
 - `reconstruct(key_packages: []const KeyPackage) !SigningKey`
 - `deriveInterpolatingValue(signer_id, key_packages) !Scalar`
 - `computeLagrangeCoefficient(identifiers: []const Identifier, x_i) !Scalar`
+- `evaluatePolynomial(identifier, coefficients: []const Scalar) Scalar`
+- `evaluateVss(identifier, commitment: VerifiableSecretSharingCommitment) Element`
+- `generateCoefficients(min_signers: u16) []Scalar`
+- `generateSecretPolynomial(secret: SigningKey, max, min, coefficients: []Scalar) !{ []Scalar, VerifiableSecretSharingCommitment }`
+- `sumCommitments(commitments: []const VerifiableSecretSharingCommitment) !VerifiableSecretSharingCommitment`
+
+## `dkg` — distributed key generation
+
+`dkg.part1/part2/part3` run FROST KeyGen without a trusted dealer (see
+[04-protocol.md](04-protocol.md) §9).
+
+### `round1`
+- `Package { commitment, proof_of_knowledge: Signature }` — broadcast; `deinit()` frees the commitment.
+- `SecretPackage { identifier, coefficients: []Scalar, commitment, min_signers, max_signers }` — kept secret; `deinit()`.
+
+### `round2`
+- `Package { signing_share: SigningShare }` — sent privately to one recipient.
+- `SecretPackage { identifier, commitment, secret_share: Scalar, min_signers, max_signers }` — kept secret; `deinit()`.
+
+### Functions
+- `part1(identifier, max_signers, min_signers) !{ round1.SecretPackage, round1.Package }`
+- `part2(secret_package: *const round1.SecretPackage, round1_packages: *AutoHashMap(Identifier, round1.Package), allocator) !{ round2.SecretPackage, AutoHashMap(Identifier, round2.Package) }`
+- `part3(round2_secret_package: *const round2.SecretPackage, round1_packages: *AutoHashMap(Identifier, round1.Package), round2_packages: *AutoHashMap(Identifier, round2.Package), allocator) !{ KeyPackage, PublicKeyPackage }`
+
+Allocations: `part2`/`part3` allocate with the supplied `allocator`; the
+`SecretPackage` coefficient/commitment allocations are owned by the package and
+released by `deinit()` (page allocator).
 
 ## `round1` — nonces and commitments
 
