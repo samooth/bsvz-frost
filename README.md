@@ -1,8 +1,8 @@
 # bsvz-frost
 
-FROST (Flexible Round-Optimized Schnorr Threshold) signatures over **secp256k1** with **SHA-256**, implemented in pure Zig using `std.crypto.ecc.Secp256k1`.
+FROST (Flexible Round-Optimized Schnorr Threshold) signatures over **secp256k1** with **SHA-256**, implemented in Zig on top of the [bsvz](https://github.com/b-open-io/bsvz) secp256k1 backend.
 
-This is a port of [ZcashFoundation/frost-secp256k1](https://github.com/ZcashFoundation/frost/tree/main/frost-secp256k1) to Zig, designed for integration with the BSV ecosystem via `bsvz` primitives.
+This is a port of [ZcashFoundation/frost-secp256k1](https://github.com/ZcashFoundation/frost/tree/main/frost-secp256k1) to Zig, designed for integration with the BSV ecosystem via `bsvz` primitives. It is verified **byte-for-byte against the official Zcash test vectors**.
 
 > **Note:** This ciphersuite is **NOT** compatible with Bitcoin BIP-340 (Taproot) signatures. Use `frost-secp256k1-tr` for Taproot compatibility.
 
@@ -14,7 +14,7 @@ This is a port of [ZcashFoundation/frost-secp256k1](https://github.com/ZcashFoun
 - **Cheater Detection**: Optional per-share verification to identify malicious signers
 - **Secret Reconstruction**: Recover the original key from threshold shares via Lagrange interpolation
 - **Single Schnorr Signing**: Standard non-threshold Schnorr signatures
-- **Pure Zig**: Zero external dependencies beyond Zig stdlib (0.15.0+)
+- **Zcash Interop**: Byte-for-byte compatible with `ZcashFoundation/frost-secp256k1` (RFC 9380 `hash_to_field` hashing), proven by an official test-vector test
 - **BSV-Ready**: Uses secp256k1 and SHA-256, the same primitives as Bitcoin SV
 
 ## Architecture
@@ -34,6 +34,10 @@ src/
   signature.zig   -- Schnorr signature (R, z) type
   demo.zig        -- CLI demo: 3-of-5 trusted dealer + full signing flow
   tests.zig       -- Comprehensive unit tests
+tests/
+  naive_test.zig   -- Integration: naive threshold signing on real bsvz
+  shamir_test.zig  -- Integration: Shamir split/reconstruct on real bsvz
+  vector_test.zig  -- Interop: official Zcash frost-secp256k1 vectors.json
 ```
 
 ## Quick Start
@@ -120,14 +124,19 @@ try pubkey.verifying_key.verify("message to sign", signature);
 | Curve | secp256k1 |
 | Hash | SHA-256 |
 | Context String | `FROST-secp256k1-SHA256-v1` |
-| H1 domain | `FROST-secp256k1-SHA256-v1rho` |
-| H2 domain | `FROST-secp256k1-SHA256-v1chal` |
-| H3 domain | `FROST-secp256k1-SHA256-v1nonce` |
-| H4 domain | `FROST-secp256k1-SHA256-v1msg` |
-| H5 domain | `FROST-secp256k1-SHA256-v1com` |
+| H1 (binding factor) | RFC 9380 `hash_to_field` (ExpandMsgXmd\<Sha256\>, L=48), DST `CTX||rho` |
+| H2 (challenge) | RFC 9380 `hash_to_field` (ExpandMsgXmd\<Sha256\>, L=48), DST `CTX||chal` |
+| H3 (nonce) | RFC 9380 `hash_to_field` (ExpandMsgXmd\<Sha256\>, L=48), DST `CTX||nonce` |
+| HDKG / HID | RFC 9380 `hash_to_field`, DST `CTX||dkg` / `CTX||id` |
+| H4 (message) | `SHA-256(CTX||"msg"||msg)` |
+| H5 (commitments) | `SHA-256(CTX||"com"||encoded_list)` |
 | Point serialization | SEC1 compressed (33 bytes) |
 | Scalar serialization | Big-endian (32 bytes) |
 | Signature format | SEC1(R) || BE(z) (65 bytes) |
+
+Hash-to-scalar functions H1/H2/H3/HDKG/HID follow RFC 9380 exactly as in the
+Zcash reference: `expand_message_xmd` (SHA-256) with DST = `CONTEXT_STRING || tag`,
+then the 48-byte output is reduced mod the curve order.
 
 ## Security Notes
 
