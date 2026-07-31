@@ -27,6 +27,8 @@ InvalidProofOfKnowledge
 
 - `fromU16(id: u16) !Identifier` — reject 0.
 - `toU16() u16`
+- `derive(msg: []const u8) !Identifier` — `HID(msg)`, uniformly random non-zero
+  identifier (rejects the zero scalar, negligible probability).
 - `serialize() [32]u8` / `deserialize(bytes: [32]u8) !Identifier`
 - `eql(other: Identifier) bool` / `lessThan(other: Identifier) bool`
 

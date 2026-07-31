@@ -12,6 +12,15 @@ or **distributed** (DKG, no trusted party); see §9.
 - `H_i`: ciphersuite hash functions (see [03-ciphersuite.md](03-ciphersuite.md)).
 - `id`: participant identifier (non-zero scalar, 32-byte big-endian).
 
+### Identifiers
+
+Identifiers are non-zero scalars, serialized as 32-byte big-endian. They can
+be created from small integers (`Identifier.fromU16`, the common `1..n` case)
+or derived from arbitrary byte strings via
+`Identifier.derive(msg) = HID(msg)`, mapping each string to a uniformly random
+non-zero identifier (a convenience, not part of the FROST specification; the
+zero value occurs with negligible probability and is rejected).
+
 ## 1. Key generation (trusted dealer)
 
 `keys.generateWithDealer(max, min, identifiers)` (or
@@ -220,7 +229,5 @@ must implement the network distribution described above.
 
 ## Not implemented
 
-- **Identifier derivation** (`HID`/`HDKG` havehing helpers exist in the
-  ciphersuite but no derivation API is exposed).
 - **1-round (preprocess) signing**: `round1.preprocess` exists for nonce
   pre-generation, but the 1-round protocol itself is not wired up.

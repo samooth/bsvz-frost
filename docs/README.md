@@ -26,4 +26,4 @@ test vectors**.
 - **NOT BIP-340 / Taproot compatible**; use `frost-secp256k1-tr` for that.
 - **Language**: Zig 0.16.0-dev.2535.
 - **Dependency**: `b-open-io/bsvz` (pinned via `build.zig.zon`).
-- **Tests**: 44 (12 unit + 2 naive + 2 shamir + 2 Zcash vector interop + 18 negative/property + 2 DKG functional + 3 DKG vector interop + 3 fuzz), green in Debug and ReleaseSafe.
+- **Tests**: 45 (13 unit + 2 naive + 2 shamir + 2 Zcash vector interop + 18 negative/property + 2 DKG functional + 3 DKG vector interop + 3 fuzz), green in Debug and ReleaseSafe.
