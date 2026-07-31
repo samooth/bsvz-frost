@@ -1,8 +1,8 @@
 # Protocol
 
 This document walks through the FROST protocol as implemented, mirroring the
-Zcash `frost-core` logic. It assumes a **trusted dealer** for key generation
-(the port does not implement DKG; see the note below).
+Zcash `frost-core` logic. Key generation can be done by a **trusted dealer**
+or **distributed** (DKG, no trusted party); see §9.
 
 ## Notation
 
@@ -171,6 +171,47 @@ key packages using Lagrange interpolation at `x = 0`:
 s = Σ_i lambda_i · share_i
 ```
 
+## 9. Distributed key generation (DKG)
+
+`dkg.part1/part2/part3` implement FROST KeyGen (RFC 9591 §7 / the FROST paper,
+Figure 1): a variant of Pedersen's DKG in which every participant runs a
+Feldman VSS as dealer in parallel, plus a zero-knowledge proof of knowledge of
+their secret constant term to defeat rogue-key attacks when `t ≥ n/2`.
+Mirrors the Zcash `keys::dkg` module byte-for-byte (proven against the official
+`vectors_dkg.json`).
+
+Communication pattern per participant `i`:
+
+- **Round 1 (broadcast):** sample the secret polynomial
+  `f_i(x) = a_{i0} + a_{i1}·x + ... + a_{i(t-1)}·x^{t-1}`, publish the
+  commitment `C_i = [a_{i0}·G, ..., a_{i(t-1)}·G]` and the proof of knowledge
+  `σ_i = (R_i, μ_i)` of `a_{i0}`:
+  ```
+  k ← Z_q,  R_i = k·G,  c_i = HDKG(serialize(id_i) || serialize(a_{i0}·G) || serialize(R_i))
+  μ_i = k + a_{i0}·c_i
+  ```
+  `dkg.part1(id, n, t)` returns the kept `round1.SecretPackage` (identifier,
+  coefficients, commitment, t, n) and the broadcast `round1.Package`
+  (commitment, proof).
+
+- **Round 2 (private shares):** each participant verifies every received proof
+  (checking `R_ℓ == μ_ℓ·G - c_ℓ·(a_{ℓ0}·G)`), then sends each other
+  participant `ℓ` the share `f_i(id_ℓ)` over a confidential, authenticated
+  channel. `dkg.part2(secret_package, round1_packages)` returns the kept
+  `round2.SecretPackage` (with `f_i(id_i)`) and the map of outgoing
+  `round2.Package` shares.
+
+- **Finalization (part3):** each participant verifies every received share
+  against the sender's commitment (VSS, `g^{f_ℓ(i)} == Σ_k φ_{ℓk}·i^k`),
+  sums them into the long-lived share `s_i = Σ_ℓ f_ℓ(i)`, and derives the
+  group verifying key by summing all participants' commitments
+  (`PublicKeyPackage.fromDkgCommitments`). Returns the `KeyPackage` and the
+  `PublicKeyPackage` — all participants must agree on the same group key.
+
+Errors: `IncorrectNumberOfPackages`, `UnknownIdentifier`,
+`IncorrectNumberOfCommitments`, `InvalidProofOfKnowledge`, `IncorrectPackage`,
+`PackageNotFound`, `InvalidSecretShare`.
+
 ## One-shot helper
 
 `frost.fullFrostSign(allocator, message, key_packages, pubkeys, min_signers)`
@@ -179,8 +220,6 @@ must implement the network distribution described above.
 
 ## Not implemented
 
-- **DKG** (distributed key generation): the reference's FROST DKG is not
-  ported; key generation is trusted-dealer only.
 - **Identifier derivation** (`HID`/`HDKG` havehing helpers exist in the
   ciphersuite but no derivation API is exposed).
 - **1-round (preprocess) signing**: `round1.preprocess` exists for nonce

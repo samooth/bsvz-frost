@@ -31,7 +31,7 @@ zig build test                 # Debug
 zig build test -Doptimize=ReleaseSafe
 ```
 
-This runs all six test binaries under one step:
+This runs all eight test binaries under one step:
 
 | Binary | Contents | Count |
 |--------|----------|-------|
@@ -40,8 +40,10 @@ This runs all six test binaries under one step:
 | `tests/shamir_test.zig` | Shamir split/reconstruct | 2 |
 | `tests/vector_test.zig` | Official Zcash `vectors.json` interop | 2 |
 | `tests/security_test.zig` | Negative/property (misuse-resistance) tests | 18 |
+| `tests/dkg_test.zig` | Functional DKG: 3-party flow + threshold sign | 2 |
+| `tests/dkg_vector_test.zig` | Official Zcash `vectors_dkg.json` interop | 3 |
 | `tests/fuzz_test.zig` | Fuzz targets (smoke-run with corpus + empty input) | 3 |
-| **Total** | | **39** |
+| **Total** | | **44** |
 
 The vector test is the key compatibility proof: it rebuilds the whole signing
 flow from the Zcash fixture's fixed nonce randomness and asserts byte-for-byte

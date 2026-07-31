@@ -89,6 +89,22 @@ the raw concatenation; the caller hashes with H5.
 
 A second test asserts the exact H4/H5 digests.
 
+## DKG vector verification
+
+`tests/dkg_vector_test.zig` replays the official `vectors_dkg.json` fixture
+end-to-end:
+
+- **Fixture used**: 3 participants (`max_signers = 3`), threshold 2, group
+  verifying key `037b5b0c4b6c91a16fb78499e8a74cc792f9ea79cb94860fcb90f801472930de47`.
+- **Flow**: for each participant, regenerates the commitment from the fixture's
+  secret polynomial coefficients and asserts it equals the fixture's VSS
+  commitments byte-for-byte → computes each participant's signing share and
+  verifying share → checks `PublicKeyPackage.fromDkgCommitments` reproduces the
+  fixture's group verifying key and all per-participant verifying shares.
+- **Negative paths**: a tampered proof of knowledge is rejected
+  (`InvalidProofOfKnowledge`); a wrong number of round-1 packages is rejected
+  (`IncorrectNumberOfPackages`).
+
 ## Reproducing the analysis
 
 The key intermediate values can be re-derived independently:
@@ -100,5 +116,6 @@ The key intermediate values can be re-derived independently:
 
 ## Status
 
-All 39 tests pass in Debug and ReleaseSafe, including the two vector interop
-tests. The port matches the Zcash reference at every observable byte.
+All 44 tests pass in Debug and ReleaseSafe, including the five vector interop
+tests (two signing + three DKG). The port matches the Zcash reference at every
+observable byte.

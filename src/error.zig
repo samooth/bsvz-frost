@@ -27,4 +27,8 @@ pub const FrostError = error{
     IdentifierDerivationNotSupported,
     RandomnessError,
     InvalidNonce,
+    IncorrectNumberOfPackages,
+    IncorrectPackage,
+    PackageNotFound,
+    InvalidProofOfKnowledge,
 };

@@ -2,7 +2,7 @@
 
 ## Test binaries
 
-`zig build test` runs six binaries under one step (39 tests, green in Debug
+`zig build test` runs eight binaries under one step (44 tests, green in Debug
 and ReleaseSafe):
 
 | Binary | Focus | Count |
@@ -12,6 +12,8 @@ and ReleaseSafe):
 | `tests/shamir_test.zig` | Shamir split/reconstruct | 2 |
 | `tests/vector_test.zig` | Official Zcash `vectors.json` byte-for-byte interop | 2 |
 | `tests/security_test.zig` | Negative / property (misuse-resistance) | 18 |
+| `tests/dkg_test.zig` | Functional DKG: 3-party flow + threshold sign | 2 |
+| `tests/dkg_vector_test.zig` | Official Zcash `vectors_dkg.json` byte-for-byte interop | 3 |
 | `tests/fuzz_test.zig` | `std.testing.fuzz` targets (corpus smoke-run) | 3 |
 
 ## Misuse-resistance suite (`security_test.zig`)
@@ -46,6 +48,21 @@ Key coverage:
 The helpers at the top of the file (`testKeygen`, `startSession`, `tamper`)
 are shared by all tests; `testKeygen` runs the full trusted-dealer keygen on
 real bsvz and returns key packages plus the public-key package.
+
+## DKG suite (`dkg_test.zig`, `dkg_vector_test.zig`)
+
+The functional test runs a full 3-party DKG (`t=2, n=3`) over the three
+rounds: every participant broadcasts a round-1 package, verifies the received
+proofs of knowledge, distributes private round-2 shares, then finalizes —
+asserting all participants agree on the same group verifying key, and that a
+2-of-3 threshold signature produced with the resulting key packages verifies.
+
+The vector test rebuilds the `KeyPackage` and `PublicKeyPackage` from the
+official Zcash `vectors_dkg.json` fixture byte-for-byte (commitment
+regeneration from the secret coefficients, per-participant verifying shares,
+group verifying key), and proves the negative paths: a tampered proof of
+knowledge is rejected with `InvalidProofOfKnowledge`, and a wrong number of
+round-1 packages is rejected with `IncorrectNumberOfPackages`.
 
 ## Fuzz targets (`fuzz_test.zig`)
 

@@ -53,6 +53,7 @@ src/
   field.zig       -- Scalar field operations (std Secp256k1.scalar.Scalar)
   group.zig       -- Group element operations (std Secp256k1 point)
   keys.zig        -- Keygen, shares, KeyPackage, PublicKeyPackage, Lagrange
+  dkg.zig         -- Distributed key generation (part1/part2/part3)
   round1.zig      -- Nonce generation and SigningCommitments
   round2.zig      -- SigningPackage, binding factors, signature shares
   aggregate.zig   -- Signature aggregation and cheater detection
@@ -64,9 +65,13 @@ src/
   tests.zig       -- Unit tests
 
 tests/
-  naive_test.zig   -- Integration tests for the naive scheme on real bsvz
-  shamir_test.zig  -- Integration tests for Shamir on real bsvz
-  vector_test.zig  -- Zcash official vectors.json end-to-end interop test
+  naive_test.zig     -- Integration tests for the naive scheme on real bsvz
+  shamir_test.zig    -- Integration tests for Shamir on real bsvz
+  vector_test.zig    -- Zcash official vectors.json end-to-end interop test
+  security_test.zig  -- Negative/property (misuse-resistance) tests
+  dkg_test.zig       -- Functional DKG: 3-party flow + threshold sign
+  dkg_vector_test.zig -- Zcash official vectors_dkg.json interop test
+  fuzz_test.zig      -- std.testing.fuzz targets
 ```
 
 ## Two layers of primitives
@@ -74,9 +79,10 @@ tests/
 `bsvz-frost` contains two distinct stacks:
 
 1. **Protocol layer (production)** — the FROST modules (`field.zig`,
-   `group.zig`, `keys.zig`, `round1.zig`, `round2.zig`, `aggregate.zig`,
-   `signature.zig`, `identifier.zig`, `ciphersuite.zig`). These use the
-   stdlib `Secp256k1` types for scalars/points and are Zcash-compatible.
+   `group.zig`, `keys.zig`, `dkg.zig`, `round1.zig`, `round2.zig`,
+   `aggregate.zig`, `signature.zig`, `identifier.zig`, `ciphersuite.zig`).
+   These use the stdlib `Secp256k1` types for scalars/points and are
+   Zcash-compatible.
 2. **Interop layer (evaluation)** — `scalar.zig`, `shamir.zig`, `naive.zig`
    built on `bsvz.crypto.Point`. These use `[32]u8` big-endian byte scalars
    and provide a plain threshold-Schnorr scheme that is **not** FROST
