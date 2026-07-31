@@ -107,3 +107,19 @@ hardening session later added the misuse-resistance and fuzz suites).
 19. **DKG test count grew to 44** (previous 39 + 2 DKG functional + 3 DKG
     vector). Rogue-key attack motivation: PoK on the constant term prevents an
     adversary from biasing the group key when `t ≥ n/2`.
+
+## Session 5 addendum — Identifier derivation
+
+20. **`Identifier::derive` is trivial once HID is proven.** The reference's
+    `derive(s)` is just `Identifier::new(HID(s))` — reject zero. No static
+    vectors exist in the reference for it, but HID shares the exact
+    `hash_to_field` machinery already proven against the official vectors.
+21. **Trust the vector-proven code over hand-rolled Python.** My first
+    independent Python `expand_message_xmd` produced a *different* value than
+    the Zig implementation — and the Zig code was right. The bug: RFC 9380's
+    `b_0` input uses `I2OSP(0, 1)` (a **single** `0x00` byte), not a
+    `b_in`-length zero pad. The already-verified Zig implementation caught the
+    Python bug, not vice versa. Cross-checks are only as good as the
+    independent implementation.
+22. **Test count is now 45** (13 unit + 2 naive + 2 shamir + 2 vector +
+    18 negative/property + 2 DKG functional + 3 DKG vector + 3 fuzz).
