@@ -132,12 +132,12 @@ try pubkey.verifying_key.verify("message to sign", signature);
 | Curve | secp256k1 |
 | Hash | SHA-256 |
 | Context String | `FROST-secp256k1-SHA256-v1` |
-| H1 (binding factor) | RFC 9380 `hash_to_field` (ExpandMsgXmd\<Sha256\>, L=48), DST `CTX||rho` |
-| H2 (challenge) | RFC 9380 `hash_to_field` (ExpandMsgXmd\<Sha256\>, L=48), DST `CTX||chal` |
-| H3 (nonce) | RFC 9380 `hash_to_field` (ExpandMsgXmd\<Sha256\>, L=48), DST `CTX||nonce` |
-| HDKG / HID | RFC 9380 `hash_to_field`, DST `CTX||dkg` / `CTX||id` |
-| H4 (message) | `SHA-256(CTX||"msg"||msg)` |
-| H5 (commitments) | `SHA-256(CTX||"com"||encoded_list)` |
+| H1 (binding factor) | RFC 9380 `hash_to_field` (ExpandMsgXmd\<Sha256\>, L=48), DST `CTX\|\|rho` |
+| H2 (challenge) | RFC 9380 `hash_to_field` (ExpandMsgXmd\<Sha256\>, L=48), DST `CTX\|\|chal` |
+| H3 (nonce) | RFC 9380 `hash_to_field` (ExpandMsgXmd\<Sha256\>, L=48), DST `CTX\|\|nonce` |
+| HDKG / HID | RFC 9380 `hash_to_field`, DST `CTX\|\|dkg` / `CTX\|\|id` |
+| H4 (message) | `SHA-256(CTX\|\|"msg"\|\|msg)` |
+| H5 (commitments) | `SHA-256(CTX\|\|"com"\|\|encoded_list)` |
 | Point serialization | SEC1 compressed (33 bytes) |
 | Scalar serialization | Big-endian (32 bytes) |
 | Signature format | SEC1(R) || BE(z) (65 bytes) |
