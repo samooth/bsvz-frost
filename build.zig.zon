@@ -1,0 +1,18 @@
+.{
+    .name = .bsvz_frost,
+    .version = "0.1.0",
+    .fingerprint = 0xe7fc178c802f2620,
+    .minimum_zig_version = "0.15.0",
+    .dependencies = .{
+        .bsvz = .{
+            .url = "git+https://github.com/b-open-io/bsvz.git#e0b4b3e623dfc731208b818c86f21054383365ae",
+            .hash = "bsvz-0.1.0-wvsL-VG0FQBRZ-flFQMWcmdnooCqs5gb4XEsW1KbCWHK",
+        },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+        "README.md",
+    },
+}

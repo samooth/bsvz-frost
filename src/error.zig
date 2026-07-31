@@ -1,0 +1,30 @@
+//! FROST error types
+const std = @import("std");
+
+pub const FrostError = error{
+    InvalidMinSigners,
+    InvalidMaxSigners,
+    IncorrectNumberOfIdentifiers,
+    DuplicatedIdentifier,
+    UnknownIdentifier,
+    IncorrectNumberOfCommitments,
+    IncorrectNumberOfShares,
+    MissingCommitment,
+    InvalidCommitment,
+    IdentityCommitment,
+    InvalidSecretShare,
+    InvalidSignatureShare,
+    InvalidSignature,
+    MalformedScalar,
+    MalformedElement,
+    MalformedSigningKey,
+    InvalidZeroScalar,
+    InvalidIdentityElement,
+    InvalidCoefficient,
+    SerializationFailed,
+    DeserializationFailed,
+    DkgNotSupported,
+    IdentifierDerivationNotSupported,
+    RandomnessError,
+    InvalidNonce,
+};
