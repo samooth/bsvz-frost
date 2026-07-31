@@ -1,0 +1,16 @@
+bsvz-frost is dual-licensed under either
+
+* the MIT License, at your option (see LICENSE-MIT), or
+* the Apache License, Version 2.0, at your option (see LICENSE-APACHE).
+
+This matches the licensing of the Zcash Foundation `frost-secp256k1` project
+that this code is ported from.
+
+Portions of this software are derived from
+[ZcashFoundation/frost-secp256k1](https://github.com/ZcashFoundation/frost/tree/main/frost-secp256k1)
+Copyright 2019-2021 Zcash Foundation, dual-licensed MIT OR Apache-2.0.
+
+This software depends on [b-open-io/bsvz](https://github.com/b-open-io/bsvz),
+which is licensed under the Open BSV License Version 5, granted by the
+BSV Association (© BSV Association). See the NOTICE file and the vendored
+`zig-pkg/bsvz-*/LICENSE` for its terms.
