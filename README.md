@@ -145,6 +145,18 @@ then the 48-byte output is reduced mod the curve order.
 - **Communication channels**: Secret shares and nonces must be sent over **confidential and authenticated** channels.
 - **Coordinator trust**: The coordinator is trusted for liveness and DoS prevention, but learns nothing secret.
 
+## Documentation
+
+Full documentation lives in the [`docs/`](docs/README.md) folder:
+
+- [Overview](docs/01-overview.md) — what FROST is and how the modules map to the protocol
+- [Getting Started](docs/02-getting-started.md) — build, test, and use as a dependency
+- [Ciphersuite](docs/03-ciphersuite.md) — hash functions, serialization, RFC 9380 details
+- [Protocol](docs/04-protocol.md) — keygen, rounds, aggregation, cheater detection
+- [API Reference](docs/05-api-reference.md) — full public API
+- [Zcash Interop](docs/06-interop.md) — test-vector verification and the bugs it caught
+- [Security Notes](docs/07-security.md) — nonce discipline, threat model, limitations
+
 ## Specification
 
 Implements [RFC 9591](https://datatracker.ietf.org/doc/html/rfc9591) -- The Flexible Round-Optimized Schnorr Threshold (FROST) Protocol for Two-Round Schnorr Signatures.
