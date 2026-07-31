@@ -36,7 +36,8 @@ pub fn aggregate(
             if (!pubkeys.verifying_shares.contains(entry.key_ptr.*)) return FrostError.UnknownIdentifier;
         }
     }
-    const binding_factor_list = try round2.computeBindingFactorList(signing_package, &pubkeys.verifying_key);
+    var binding_factor_list = try round2.computeBindingFactorList(signing_package, &pubkeys.verifying_key, std.heap.page_allocator);
+    defer binding_factor_list.deinit();
     const group_commitment = try round2.computeGroupCommitment(signing_package, binding_factor_list);
     // Sum signature shares
     var z = field.scalarZero();
@@ -77,7 +78,7 @@ fn detectCheater(
     group_commitment: group.Element,
     cheater_detection: CheaterDetection,
 ) !void {
-    const challenge = keys.challenge(&group_commitment, &pubkeys.verifying_key, signing_package.message);
+    const challenge = try keys.challenge(&group_commitment, &pubkeys.verifying_key, signing_package.message);
     const identifiers = try round2.participatingIdentifiers(signing_package, std.heap.page_allocator);
     defer std.heap.page_allocator.free(identifiers);
     var all_culprits = std.ArrayList(Identifier).empty;
@@ -115,9 +116,10 @@ pub fn verifySignatureShare(
     signing_package: *const round2.SigningPackage,
     verifying_key: *const keys.VerifyingKey,
 ) !void {
-    const binding_factor_list = try round2.computeBindingFactorList(signing_package, verifying_key);
+    var binding_factor_list = try round2.computeBindingFactorList(signing_package, verifying_key, std.heap.page_allocator);
+    defer binding_factor_list.deinit();
     const group_commitment = try round2.computeGroupCommitment(signing_package, binding_factor_list);
-    const challenge = keys.challenge(&group_commitment, verifying_key, signing_package.message);
+    const challenge = try keys.challenge(&group_commitment, verifying_key, signing_package.message);
     const identifiers = try round2.participatingIdentifiers(signing_package, std.heap.page_allocator);
     defer std.heap.page_allocator.free(identifiers);
     const lambda_i = try keys.computeLagrangeCoefficient(identifiers, identifier);

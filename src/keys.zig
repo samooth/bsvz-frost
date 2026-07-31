@@ -187,7 +187,7 @@ pub const SigningKey = struct {
         const public = VerifyingKey.fromSigningKey(self);
         const k = field.scalarRandom();
         const R = group.elementScalarBaseMul(k);
-        const c = challenge(&R, &public, message);
+        const c = try challenge(&R, &public, message);
         const z = k.add(c.mul(self.scalar));
         return Signature{ .R = R, .z = z };
     }
@@ -220,7 +220,7 @@ pub const VerifyingKey = struct {
 
     pub fn verify(self: VerifyingKey, message: []const u8, signature: Signature) !void {
         const zB = group.elementScalarBaseMul(signature.z);
-        const cA = group.elementScalarMul(self.element, challenge(&signature.R, &self, message));
+        const cA = group.elementScalarMul(self.element, try challenge(&signature.R, &self, message));
         const check = group.elementSub(zB, group.elementAdd(cA, signature.R));
         if (!group.elementIsIdentity(check)) {
             return FrostError.InvalidSignature;
@@ -233,16 +233,15 @@ pub const VerifyingKey = struct {
 };
 
 /// Compute Schnorr challenge.
-pub fn challenge(R: *const Element, verifying_key: *const VerifyingKey, msg: []const u8) Scalar {
-    var hasher = std.crypto.hash.sha2.Sha256.init(.{});
+pub fn challenge(R: *const Element, verifying_key: *const VerifyingKey, msg: []const u8) !Scalar {
     const r_bytes = group.elementSerialize(R.*) catch [_]u8{0} ** 33;
-    hasher.update(&r_bytes);
     const vk_bytes = group.elementSerialize(verifying_key.element) catch [_]u8{0} ** 33;
-    hasher.update(&vk_bytes);
-    hasher.update(msg);
-    var out: [32]u8 = undefined;
-    hasher.final(&out);
-    return cs.H2(&out);
+    var preimage = std.ArrayList(u8).empty;
+    defer preimage.deinit(std.heap.page_allocator);
+    try preimage.appendSlice(std.heap.page_allocator, &r_bytes);
+    try preimage.appendSlice(std.heap.page_allocator, &vk_bytes);
+    try preimage.appendSlice(std.heap.page_allocator, msg);
+    return cs.H2(preimage.items);
 }
 
 /// Evaluate polynomial at identifier using Horner's method.
