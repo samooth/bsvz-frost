@@ -35,7 +35,7 @@ This runs all eight test binaries under one step:
 
 | Binary | Contents | Count |
 |--------|----------|-------|
-| `src/tests.zig` | Unit tests for the FROST modules | 12 |
+| `src/tests.zig` | Unit tests for the FROST modules | 13 |
 | `tests/naive_test.zig` | Naive threshold signing on real bsvz | 2 |
 | `tests/shamir_test.zig` | Shamir split/reconstruct | 2 |
 | `tests/vector_test.zig` | Official Zcash `vectors.json` interop | 2 |
@@ -43,7 +43,7 @@ This runs all eight test binaries under one step:
 | `tests/dkg_test.zig` | Functional DKG: 3-party flow + threshold sign | 2 |
 | `tests/dkg_vector_test.zig` | Official Zcash `vectors_dkg.json` interop | 3 |
 | `tests/fuzz_test.zig` | Fuzz targets (smoke-run with corpus + empty input) | 3 |
-| **Total** | | **44** |
+| **Total** | | **45** |
 
 The vector test is the key compatibility proof: it rebuilds the whole signing
 flow from the Zcash fixture's fixed nonce randomness and asserts byte-for-byte

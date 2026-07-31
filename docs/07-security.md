@@ -84,8 +84,6 @@ formal proof; see the
 
 ## Known gaps / limitations
 
-- **No identifier derivation.** `HID`/`HDKG` are exposed as ciphersuite hash
-  functions but the derivation API is not wired up.
 - **1-round signing not wired up.** `round1.preprocess` can pre-generate
   nonces, but the 1-round protocol itself is not exposed.
 - The library does not implement side-channel hardening beyond what Zig's

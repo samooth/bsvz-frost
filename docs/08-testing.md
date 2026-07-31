@@ -2,12 +2,12 @@
 
 ## Test binaries
 
-`zig build test` runs eight binaries under one step (44 tests, green in Debug
+`zig build test` runs eight binaries under one step (45 tests, green in Debug
 and ReleaseSafe):
 
 | Binary | Focus | Count |
 |--------|-------|-------|
-| `src/tests.zig` | Unit tests for the FROST modules | 12 |
+| `src/tests.zig` | Unit tests for the FROST modules | 13 |
 | `tests/naive_test.zig` | End-to-end threshold signing on real bsvz | 2 |
 | `tests/shamir_test.zig` | Shamir split/reconstruct | 2 |
 | `tests/vector_test.zig` | Official Zcash `vectors.json` byte-for-byte interop | 2 |
