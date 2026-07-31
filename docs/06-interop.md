@@ -100,5 +100,5 @@ The key intermediate values can be re-derived independently:
 
 ## Status
 
-All 18 tests pass in Debug and ReleaseSafe, including the two vector interop
+All 39 tests pass in Debug and ReleaseSafe, including the two vector interop
 tests. The port matches the Zcash reference at every observable byte.
