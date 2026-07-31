@@ -61,37 +61,53 @@ pub const SigningPackage = struct {
         return self.signing_commitments.get(identifier);
     }
 
+    /// Compute the raw binding factor preimages (inputs to H1) for each
+    /// participant, following `SigningPackage::binding_factor_preimages` in
+    /// the reference implementation:
+    ///
+    ///     serialize(VK) || H4(msg) || H5(encoded_commitments) || serialize(id)
     pub fn bindingFactorPreimages(
         self: SigningPackage,
         verifying_key: *const keys.VerifyingKey,
-    ) !std.AutoHashMap(Identifier, [32]u8) {
-        var result = std.AutoHashMap(Identifier, [32]u8).init(std.heap.page_allocator);
+        allocator: std.mem.Allocator,
+    ) !std.AutoHashMap(Identifier, []u8) {
+        var result = std.AutoHashMap(Identifier, []u8).init(allocator);
         const vk_bytes = try verifying_key.serialize();
         const msg_hash = cs.H4(self.message);
-        const com_hash = cs.H5(&try round1.encodeGroupCommitments(self.signing_commitments));
+        const encoded = try round1.encodeGroupCommitments(self.signing_commitments, allocator);
+        defer allocator.free(encoded);
+        const com_hash = cs.H5(encoded);
         var it = self.signing_commitments.iterator();
         while (it.next()) |entry| {
-            var hasher = std.crypto.hash.sha2.Sha256.init(.{});
-            hasher.update(&vk_bytes);
-            hasher.update(&msg_hash);
-            hasher.update(&com_hash);
+            var preimage = std.ArrayList(u8).empty;
+            errdefer preimage.deinit(allocator);
+            try preimage.appendSlice(allocator, &vk_bytes);
+            try preimage.appendSlice(allocator, &msg_hash);
+            try preimage.appendSlice(allocator, &com_hash);
             const id_bytes = entry.key_ptr.*.serialize();
-            hasher.update(&id_bytes);
-            var out: [32]u8 = undefined;
-            hasher.final(&out);
-            try result.put(entry.key_ptr.*, out);
+            try preimage.appendSlice(allocator, &id_bytes);
+            try result.put(entry.key_ptr.*, try preimage.toOwnedSlice(allocator));
         }
         return result;
     }
 };
 
 /// Compute binding factor list.
-pub fn computeBindingFactorList(signing_package: *const SigningPackage, verifying_key: *const keys.VerifyingKey) !std.AutoHashMap(Identifier, field.Scalar) {
-    var result = std.AutoHashMap(Identifier, field.Scalar).init(std.heap.page_allocator);
-    const preimages = try signing_package.bindingFactorPreimages(verifying_key);
+pub fn computeBindingFactorList(
+    signing_package: *const SigningPackage,
+    verifying_key: *const keys.VerifyingKey,
+    allocator: std.mem.Allocator,
+) !std.AutoHashMap(Identifier, field.Scalar) {
+    var result = std.AutoHashMap(Identifier, field.Scalar).init(allocator);
+    var preimages = try signing_package.bindingFactorPreimages(verifying_key, allocator);
+    defer {
+        var pit = preimages.valueIterator();
+        while (pit.next()) |p| allocator.free(p.*);
+        preimages.deinit();
+    }
     var it = preimages.iterator();
     while (it.next()) |entry| {
-        const bf = cs.H1(&entry.value_ptr.*);
+        const bf = cs.H1(entry.value_ptr.*);
         try result.put(entry.key_ptr.*, bf);
     }
     return result;
@@ -159,12 +175,13 @@ pub fn sign(
     if (!std.meta.eql(signer_nonces.commitments, commitment)) {
         return FrostError.InvalidCommitment;
     }
-    const binding_factor_list = try computeBindingFactorList(signing_package, &key_package.verifying_key);
+    var binding_factor_list = try computeBindingFactorList(signing_package, &key_package.verifying_key, std.heap.page_allocator);
+    defer binding_factor_list.deinit();
     const binding_factor = binding_factor_list.get(key_package.identifier) orelse return FrostError.UnknownIdentifier;
     const group_commitment = try computeGroupCommitment(signing_package, binding_factor_list);
     const identifiers = try participatingIdentifiers(signing_package, std.heap.page_allocator);
     defer std.heap.page_allocator.free(identifiers);
     const lambda_i = try keys.computeLagrangeCoefficient(identifiers, key_package.identifier);
-    const challenge = keys.challenge(&group_commitment, &key_package.verifying_key, signing_package.message);
+    const challenge = try keys.challenge(&group_commitment, &key_package.verifying_key, signing_package.message);
     return computeSignatureShare(signer_nonces, binding_factor, lambda_i, key_package, challenge);
 }

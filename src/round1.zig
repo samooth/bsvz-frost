@@ -119,21 +119,42 @@ pub const GroupCommitmentShare = struct {
     }
 };
 
-/// Encode group commitments list for hashing.
-pub fn encodeGroupCommitments(signing_commitments: std.AutoHashMap(Identifier, SigningCommitments)) ![32]u8 {
-    var hasher = std.crypto.hash.sha2.Sha256.init(.{});
-    var it = signing_commitments.iterator();
-    while (it.next()) |entry| {
-        const id_bytes = entry.key_ptr.*.serialize();
-        hasher.update(&id_bytes);
-        const hiding_bytes = try entry.value_ptr.*.hiding.serialize();
-        hasher.update(&hiding_bytes);
-        const binding_bytes = try entry.value_ptr.*.binding.serialize();
-        hasher.update(&binding_bytes);
+/// Encode the list of group signing commitments as raw bytes.
+///
+/// Implements `encode_group_commitments` from the spec: for each participant
+/// (in ascending identifier order) the serialized identifier followed by the
+/// serialized hiding and binding commitments. The caller hashes this with H5.
+///
+/// `signing_commitments` must contain the map of participant identifiers to
+/// the signing commitments they issued.
+pub fn encodeGroupCommitments(
+    signing_commitments: std.AutoHashMap(Identifier, SigningCommitments),
+    allocator: std.mem.Allocator,
+) ![]u8 {
+    var ids = std.ArrayList(Identifier).empty;
+    defer ids.deinit(allocator);
+    var it = signing_commitments.keyIterator();
+    while (it.next()) |id| {
+        try ids.append(allocator, id.*);
     }
-    var out: [32]u8 = undefined;
-    hasher.final(&out);
-    return out;
+    std.mem.sort(Identifier, ids.items, {}, idLessThan);
+
+    var bytes = std.ArrayList(u8).empty;
+    errdefer bytes.deinit(allocator);
+    for (ids.items) |id| {
+        const comm = signing_commitments.get(id) orelse continue;
+        const id_bytes = id.serialize();
+        try bytes.appendSlice(allocator, &id_bytes);
+        const hiding_bytes = try comm.hiding.serialize();
+        try bytes.appendSlice(allocator, &hiding_bytes);
+        const binding_bytes = try comm.binding.serialize();
+        try bytes.appendSlice(allocator, &binding_bytes);
+    }
+    return bytes.toOwnedSlice(allocator);
+}
+
+fn idLessThan(_: void, a: Identifier, b: Identifier) bool {
+    return a.lessThan(b);
 }
 
 /// Generate one nonce/commitment pair (standard 2-round FROST).

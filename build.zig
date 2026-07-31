@@ -73,4 +73,15 @@ pub fn build(b: *std.Build) void {
     const shamir_tests = b.addTest(.{ .root_module = shamir_mod });
     const run_shamir_tests = b.addRunArtifact(shamir_tests);
     test_step.dependOn(&run_shamir_tests.step);
+
+    // Interop test against official ZcashFoundation/frost-secp256k1 vectors
+    const vector_mod = b.createModule(.{
+        .root_source_file = b.path("tests/vector_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    vector_mod.addImport("bsvz-frost", frost_mod);
+    const vector_tests = b.addTest(.{ .root_module = vector_mod });
+    const run_vector_tests = b.addRunArtifact(vector_tests);
+    test_step.dependOn(&run_vector_tests.step);
 }
