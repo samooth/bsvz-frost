@@ -74,12 +74,14 @@ tests.
 
 13. **Keep integration tests as separate `addTest` binaries** under one `test`
     step; the vector test needs no `bsvz` import, only `bsvz-frost`.
-14. **Test count is now 18** (12 unit + 2 naive + 2 shamir + 2 vector). Run
-    Debug *and* ReleaseSafe before committing.
+14. **Test count grew to 39** (12 unit + 2 naive + 2 shamir + 2 vector + 18
+    negative/property + 3 fuzz) in the Phase 0 hardening session. Run Debug
+    *and* ReleaseSafe before committing.
 
 ## Session 3 outcome
 
 `bsvz-frost` now matches `ZcashFoundation/frost-secp256k1` byte-for-byte: all
 four hash/encoding bugs fixed, and a new end-to-end test-vector test proves
 interop against the official `vectors.json` fixture (participants 1 & 3, t=2,
-message `"test"`). All 18 tests pass in Debug and ReleaseSafe.
+message `"test"`). All 39 tests pass in Debug and ReleaseSafe (the Phase 0
+hardening session later added the misuse-resistance and fuzz suites).
