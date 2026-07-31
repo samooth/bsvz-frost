@@ -13,7 +13,7 @@ to `ZcashFoundation/frost-secp256k1`.
 | Context string | `FROST-secp256k1-SHA256-v1` |
 | Point serialization | SEC1 compressed (33 bytes) |
 | Scalar serialization | Big-endian (32 bytes) |
-| Signature format | `SEC1(R) || BE(z)` (65 bytes) |
+| Signature format | `SEC1(R) \|\| BE(z)` (65 bytes) |
 
 ## Hash functions
 
@@ -36,11 +36,11 @@ hash_to_field(msg, count = 1, L = 48, expander = expand_message_xmd(SHA-256))
 
 | Function | DST (`CTX = "FROST-secp256k1-SHA256-v1"`) | Purpose |
 |----------|-------------------------------------------|---------|
-| `H1` | `CTX || "rho"` | Binding factors |
-| `H2` | `CTX || "chal"` | Schnorr challenges |
-| `H3` | `CTX || "nonce"` | Nonce derivation from randomness |
-| `HDKG` | `CTX || "dkg"` | Distributed keygen hash |
-| `HID` | `CTX || "id"` | Identifier derivation |
+| `H1` | `CTX \|\| "rho"` | Binding factors |
+| `H2` | `CTX \|\| "chal"` | Schnorr challenges |
+| `H3` | `CTX \|\| "nonce"` | Nonce derivation from randomness |
+| `HDKG` | `CTX \|\| "dkg"` | Distributed keygen hash |
+| `HID` | `CTX \|\| "id"` | Identifier derivation |
 
 > Using plain `SHA-256(CTX || tag || msg)` reduced mod `n` produces **different**
 > scalars than the reference — this was one of the four compatibility bugs
@@ -52,8 +52,8 @@ Plain SHA-256 over the tagged input:
 
 | Function | Input | Purpose |
 |----------|-------|---------|
-| `H4` | `SHA-256(CTX || "msg" || msg)` | Message binding in binding-factor preimages |
-| `H5` | `SHA-256(CTX || "com" || encoded_commitments)` | Commitment-list binding |
+| `H4` | `SHA-256(CTX \|\| "msg" \|\| msg)` | Message binding in binding-factor preimages |
+| `H5` | `SHA-256(CTX \|\| "com" \|\| encoded_commitments)` | Commitment-list binding |
 
 ## Signature format
 
