@@ -85,3 +85,25 @@ four hash/encoding bugs fixed, and a new end-to-end test-vector test proves
 interop against the official `vectors.json` fixture (participants 1 & 3, t=2,
 message `"test"`). All 39 tests pass in Debug and ReleaseSafe (the Phase 0
 hardening session later added the misuse-resistance and fuzz suites).
+
+## Session 4 addendum — DKG (FROST KeyGen)
+
+15. **DKG vectors exist too.** `frost-secp256k1/tests/helpers/vectors_dkg.json`
+    covers 3 participants, t=2, group VK
+    `037b5b0c...930de47`. The DKG proof of knowledge is
+    `c = HDKG(serialize(id) ‖ serialize(a00·G) ‖ serialize(R))`,
+    `μ = k + a00·c`, verified as `R == μ·G - c·(a00·G)` — the hash of the
+    commitment is *inside* the proof, unlike the challenge in signing.
+16. **`VerifiableSecretSharingCommitment.verifyingKey()` allocates.** It returns
+    owned coefficient elements that must be freed; `sumCommitments` had to
+    return heap-allocated commitments to avoid stack-array aliasing when
+    multiple participants' commitments are summed.
+17. **Zig array-in-struct aliasing:** a slice pointing at a stack array that gets
+    reused across loop iterations aliases subsequent iterations' data. The
+    vector test had to heap-allocate the summed commitment per participant.
+18. **Error precedence in negative tests:** a tampered PoK must first pass the
+    package-count check, so the tamper test needs 2 round-1 packages (not 1)
+    to reach the PoK verification and produce `InvalidProofOfKnowledge`.
+19. **DKG test count grew to 44** (previous 39 + 2 DKG functional + 3 DKG
+    vector). Rogue-key attack motivation: PoK on the constant term prevents an
+    adversary from biasing the group key when `t ≥ n/2`.
