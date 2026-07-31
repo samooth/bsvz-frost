@@ -31,7 +31,7 @@ zig build test                 # Debug
 zig build test -Doptimize=ReleaseSafe
 ```
 
-This runs all four test binaries under one step:
+This runs all six test binaries under one step:
 
 | Binary | Contents | Count |
 |--------|----------|-------|
@@ -39,11 +39,28 @@ This runs all four test binaries under one step:
 | `tests/naive_test.zig` | Naive threshold signing on real bsvz | 2 |
 | `tests/shamir_test.zig` | Shamir split/reconstruct | 2 |
 | `tests/vector_test.zig` | Official Zcash `vectors.json` interop | 2 |
-| **Total** | | **18** |
+| `tests/security_test.zig` | Negative/property (misuse-resistance) tests | 18 |
+| `tests/fuzz_test.zig` | Fuzz targets (smoke-run with corpus + empty input) | 3 |
+| **Total** | | **39** |
 
 The vector test is the key compatibility proof: it rebuilds the whole signing
 flow from the Zcash fixture's fixed nonce randomness and asserts byte-for-byte
 equality at every stage (see [06-interop.md](06-interop.md)).
+
+## Fuzzing
+
+The three `std.testing.fuzz` targets (wire deserializers, hash functions, and
+scalar operations) are registered as fuzz steps. On the current Zig
+0.16.0-dev toolchain, `zig build --fuzz=N` crashes in the build runner itself
+(a double-free in `std.Build.Step.Run.rerunInFuzzMode`), so coverage-guided
+fuzzing is not yet runnable here. The targets still execute their corpus and
+an empty seed under `zig build test` (the 3 fuzz entries above), so the
+corpus is exercised in CI even without libFuzzer. Once the toolchain bug is
+fixed, run:
+
+```bash
+zig build --fuzz=1000 test
+```
 
 ## Use as a dependency
 

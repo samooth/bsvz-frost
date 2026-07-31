@@ -6,6 +6,8 @@ This is a port of [ZcashFoundation/frost-secp256k1](https://github.com/ZcashFoun
 
 > **Note:** This ciphersuite is **NOT** compatible with Bitcoin BIP-340 (Taproot) signatures. Use `frost-secp256k1-tr` for Taproot compatibility.
 
+> **⚠ Not production ready.** The Zcash reference was audited, but **this Zig port is a separate, un-audited codebase**. Byte-compatibility with the official test vectors proves correctness, not security. Do not use with real keys/funds until it has its own security review. See [Security Notes](docs/07-security.md).
+
 ## Features
 
 - **Trusted Dealer Key Generation**: Split a secret into `t-of-n` Shamir shares
@@ -38,6 +40,8 @@ tests/
   naive_test.zig   -- Integration: naive threshold signing on real bsvz
   shamir_test.zig  -- Integration: Shamir split/reconstruct on real bsvz
   vector_test.zig  -- Interop: official Zcash frost-secp256k1 vectors.json
+  security_test.zig -- Misuse-resistance: 18 negative/property tests
+  fuzz_test.zig    -- 3 fuzz targets (deserializers, hashes, scalar ops)
 ```
 
 ## Quick Start
@@ -156,6 +160,7 @@ Full documentation lives in the [`docs/`](docs/README.md) folder:
 - [API Reference](docs/05-api-reference.md) — full public API
 - [Zcash Interop](docs/06-interop.md) — test-vector verification and the bugs it caught
 - [Security Notes](docs/07-security.md) — nonce discipline, threat model, limitations
+- [Testing Guide](docs/08-testing.md) — negative/property tests, fuzz targets, how to run
 
 ## Specification
 

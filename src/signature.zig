@@ -21,7 +21,7 @@ pub const Signature = struct {
 
     pub fn deserialize(bytes: [65]u8) !Signature {
         const R = try Secp256k1.fromSec1(bytes[0..33]);
-        const z = try Secp256k1.scalar.Scalar.fromBytes(bytes[33..65], .big);
+        const z = try Secp256k1.scalar.Scalar.fromBytes(bytes[33..65].*, .big);
         return Signature{ .R = R, .z = z };
     }
 };

@@ -18,6 +18,7 @@ test vectors**.
 | [05-api-reference.md](05-api-reference.md) | Full public API reference per module |
 | [06-interop.md](06-interop.md) | Zcash compatibility, test-vector verification, the bugs it caught |
 | [07-security.md](07-security.md) | Security notes, nonce discipline, threat model |
+| [08-testing.md](08-testing.md) | Test suite guide: negative/property tests, fuzz targets, how to run |
 
 ## Quick facts
 
@@ -25,4 +26,4 @@ test vectors**.
 - **NOT BIP-340 / Taproot compatible**; use `frost-secp256k1-tr` for that.
 - **Language**: Zig 0.16.0-dev.2535.
 - **Dependency**: `b-open-io/bsvz` (pinned via `build.zig.zon`).
-- **Tests**: 18 (12 unit + 2 naive + 2 shamir + 2 Zcash vector interop), green in Debug and ReleaseSafe.
+- **Tests**: 39 (12 unit + 2 naive + 2 shamir + 2 Zcash vector interop + 18 negative/property + 3 fuzz), green in Debug and ReleaseSafe.

@@ -84,4 +84,27 @@ pub fn build(b: *std.Build) void {
     const vector_tests = b.addTest(.{ .root_module = vector_mod });
     const run_vector_tests = b.addRunArtifact(vector_tests);
     test_step.dependOn(&run_vector_tests.step);
+
+    // Negative / misuse-resistance tests
+    const security_mod = b.createModule(.{
+        .root_source_file = b.path("tests/security_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    security_mod.addImport("bsvz-frost", frost_mod);
+    const security_tests = b.addTest(.{ .root_module = security_mod });
+    const run_security_tests = b.addRunArtifact(security_tests);
+    test_step.dependOn(&run_security_tests.step);
+
+    // Fuzz targets (smoke-run under `zig build test`; fuzzed via
+    // `zig build --fuzz=NNN` or `zig build --fuzz`)
+    const fuzz_mod = b.createModule(.{
+        .root_source_file = b.path("tests/fuzz_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    fuzz_mod.addImport("bsvz-frost", frost_mod);
+    const fuzz_tests = b.addTest(.{ .root_module = fuzz_mod });
+    const run_fuzz_tests = b.addRunArtifact(fuzz_tests);
+    test_step.dependOn(&run_fuzz_tests.step);
 }
