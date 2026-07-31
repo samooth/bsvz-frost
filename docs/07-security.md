@@ -1,5 +1,14 @@
 # Security Notes
 
+> **Production-readiness status: NOT PRODUCTION READY.**
+> The reference implementation ([ZcashFoundation/frost-secp256k1](https://github.com/ZcashFoundation/frost/tree/main/frost-secp256k1))
+> was audited (ZK Labs, 2021), but **this Zig port is a separate, un-audited
+> codebase**. Byte-for-byte test-vector compatibility proves the protocol math
+> is correct — it does **not** prove this implementation is secure against
+> side-channel attacks, misuse, or memory-safety bugs. Do not use with real
+> keys or funds until this code has its own security review. See
+> [Production Readiness](#production-readiness) below.
+
 `bsvz-frost` implements a real threshold-signature protocol. This document
 covers the operational security requirements and the threat model. It is not a
 formal proof; see the
@@ -82,3 +91,27 @@ formal proof; see the
 - The library does not implement side-channel hardening beyond what Zig's
   stdlib `Secp256k1` provides; deployment on devices should be reviewed
   against the local threat model.
+
+## Production readiness
+
+What the Zcash audit covers, and what it does not:
+
+| Aspect | Status |
+|--------|--------|
+| FROST protocol design (RFC 9591) | Audited (by the Zcash Foundation's audit of the reference) |
+| This port's byte-level correctness | Verified against official Zcash test vectors |
+| This port's implementation security | **Un-audited** |
+| DKG | **Missing** — trusted-dealer keygen only |
+| Side-channel hardening | Not reviewed; stdlib `Secp256k1` is not guaranteed constant-time |
+| Fuzzing / malformed-input testing | Fuzz targets written; coverage-guided run blocked by a build-runner bug on the current Zig dev toolchain (smoke-run in `zig build test`) |
+| Misuse-resistance tests (nonce reuse, etc.) | Present — 18 negative/property tests in `tests/security_test.zig` |
+| Stable toolchain | Uses Zig `0.16.0-dev` (unstable) |
+
+Minimum bar before real keys/funds:
+1. Independent security review of this Zig code.
+2. Add DKG (or a documented, operationally sound trusted-dealer procedure).
+3. Fuzzing and property tests (e.g. aggregate rejects wrong-subsets, shares
+   verify, nonce reuse is caught). The negative/property suite ships now;
+   run coverage-guided fuzzing once the toolchain's `--fuzz` bug is fixed.
+4. Move to a stable Zig release and re-verify the vectors.
+5. Review side-channel posture against the deployment's threat model.

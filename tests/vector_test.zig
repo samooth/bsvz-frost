@@ -3,7 +3,7 @@
 const std = @import("std");
 const frost = @import("bsvz-frost");
 
-const allocator = std.heap.page_allocator;
+const allocator = std.testing.allocator;
 
 fn fromHex(comptime n: usize, s: []const u8) [n]u8 {
     var out: [n]u8 = undefined;
@@ -13,23 +13,9 @@ fn fromHex(comptime n: usize, s: []const u8) [n]u8 {
     return out;
 }
 
-fn hexToSlice(s: []const u8) []u8 {
-    const n = s.len / 2;
-    const out = allocator.alloc(u8, n) catch unreachable;
-    for (0..n) |i| {
-        out[i] = (std.fmt.charToDigit(s[i * 2], 16) catch unreachable) * 16 + (std.fmt.charToDigit(s[i * 2 + 1], 16) catch unreachable);
-    }
-    return out;
-}
-
-fn hexEql(s: []const u8, bytes: []const u8) bool {
-    if (s.len / 2 != bytes.len) return false;
-    for (bytes, 0..) |b, i| {
-        const hi = (std.fmt.charToDigit(s[i * 2], 16) catch unreachable) * 16;
-        const lo = std.fmt.charToDigit(s[i * 2 + 1], 16) catch unreachable;
-        if (b != hi + lo) return false;
-    }
-    return true;
+fn expectHex(comptime n: usize, s: []const u8, actual: []const u8) !void {
+    const expected = fromHex(n, s);
+    try std.testing.expectEqualSlices(u8, &expected, actual);
 }
 
 test "Zcash frost-secp256k1 vectors.json end-to-end" {
@@ -70,8 +56,7 @@ test "Zcash frost-secp256k1 vectors.json end-to-end" {
     // 1. Group public key matches G * secret.
     const secret_scalar = try frost.SigningKey.deserialize(fromHex(32, group_secret_hex));
     const vk = frost.VerifyingKey.fromSigningKey(secret_scalar);
-    const vk_bytes = try vk.serialize();
-    try std.testing.expect(hexEql(verifying_key_hex, &vk_bytes));
+    try expectHex(33, verifying_key_hex, &(try vk.serialize()));
 
     // 2. Key packages for participants 1 and 3 (shares from the vector).
     const id1 = try frost.Identifier.fromU16(1);
@@ -102,28 +87,27 @@ test "Zcash frost-secp256k1 vectors.json end-to-end" {
     const hiding3 = frost.Nonce.nonceGenerateFromRandomBytes(&share3, fromHex(32, hiding_rand3_hex));
     const binding3 = frost.Nonce.nonceGenerateFromRandomBytes(&share3, fromHex(32, binding_rand3_hex));
 
-    try std.testing.expect(hexEql(hiding_nonce1_hex, &hiding1.serialize()));
-    try std.testing.expect(hexEql(binding_nonce1_hex, &binding1.serialize()));
-    try std.testing.expect(hexEql(hiding_nonce3_hex, &hiding3.serialize()));
-    try std.testing.expect(hexEql(binding_nonce3_hex, &binding3.serialize()));
+    try expectHex(32, hiding_nonce1_hex, &hiding1.serialize());
+    try expectHex(32, binding_nonce1_hex, &binding1.serialize());
+    try expectHex(32, hiding_nonce3_hex, &hiding3.serialize());
+    try expectHex(32, binding_nonce3_hex, &binding3.serialize());
 
     const nonces1 = frost.SigningNonces.fromNonces(hiding1, binding1);
     const nonces3 = frost.SigningNonces.fromNonces(hiding3, binding3);
 
     // 4. Commitments match.
-    try std.testing.expect(hexEql(hiding_comm1_hex, &(try nonces1.commitments.hiding.serialize())));
-    try std.testing.expect(hexEql(binding_comm1_hex, &(try nonces1.commitments.binding.serialize())));
-    try std.testing.expect(hexEql(hiding_comm3_hex, &(try nonces3.commitments.hiding.serialize())));
-    try std.testing.expect(hexEql(binding_comm3_hex, &(try nonces3.commitments.binding.serialize())));
+    try expectHex(33, hiding_comm1_hex, &(try nonces1.commitments.hiding.serialize()));
+    try expectHex(33, binding_comm1_hex, &(try nonces1.commitments.binding.serialize()));
+    try expectHex(33, hiding_comm3_hex, &(try nonces3.commitments.hiding.serialize()));
+    try expectHex(33, binding_comm3_hex, &(try nonces3.commitments.binding.serialize()));
 
     // 5. Signing package (commitments sorted by identifier).
     var commitments = std.AutoHashMap(frost.Identifier, frost.SigningCommitments).init(allocator);
     defer commitments.deinit();
     try commitments.put(id1, nonces1.commitments);
     try commitments.put(id3, nonces3.commitments);
-    const message = hexToSlice(message_hex);
-    defer allocator.free(message);
-    const signing_package = frost.SigningPackage.new(commitments, message);
+    const message = fromHex(4, message_hex);
+    const signing_package = frost.SigningPackage.new(commitments, &message);
 
     // 6. Binding factor preimages and factors must match the vector.
     var bfi = try signing_package.bindingFactorPreimages(&vk, allocator);
@@ -132,19 +116,19 @@ test "Zcash frost-secp256k1 vectors.json end-to-end" {
         while (it.next()) |p| allocator.free(p.*);
         bfi.deinit();
     }
-    try std.testing.expect(hexEql(bfi1_hex, bfi.get(id1).?));
-    try std.testing.expect(hexEql(bfi3_hex, bfi.get(id3).?));
+    try expectHex(129, bfi1_hex, bfi.get(id1).?);
+    try expectHex(129, bfi3_hex, bfi.get(id3).?);
 
     var bfs = try frost.round2.computeBindingFactorList(&signing_package, &vk, allocator);
     defer bfs.deinit();
-    try std.testing.expect(hexEql(binding_factor1_hex, &bfs.get(id1).?.toBytes(.big)));
-    try std.testing.expect(hexEql(binding_factor3_hex, &bfs.get(id3).?.toBytes(.big)));
+    try expectHex(32, binding_factor1_hex, &bfs.get(id1).?.toBytes(.big));
+    try expectHex(32, binding_factor3_hex, &bfs.get(id3).?.toBytes(.big));
 
     // 7. Signature shares must match.
     const share_sig1 = try frost.round2.sign(&signing_package, &nonces1, &kp1);
     const share_sig3 = try frost.round2.sign(&signing_package, &nonces3, &kp3);
-    try std.testing.expect(hexEql(sig_share1_hex, &share_sig1.serialize()));
-    try std.testing.expect(hexEql(sig_share3_hex, &share_sig3.serialize()));
+    try expectHex(32, sig_share1_hex, &share_sig1.serialize());
+    try expectHex(32, sig_share3_hex, &share_sig3.serialize());
 
     // 8. Aggregate and verify against the final signature bytes.
     var signature_shares = std.AutoHashMap(frost.Identifier, frost.SignatureShare).init(allocator);
@@ -164,8 +148,8 @@ test "Zcash frost-secp256k1 vectors.json end-to-end" {
     };
     const sig = try frost.aggregate.aggregateSimple(&signing_package, signature_shares, &pubkey_package);
 
-    try std.testing.expect(hexEql(final_sig_hex, &(try sig.serialize())));
-    try pubkey_package.verifying_key.verify(message, sig);
+    try expectHex(65, final_sig_hex, &(try sig.serialize()));
+    try pubkey_package.verifying_key.verify(&message, sig);
 }
 
 test "Zcash vectors.json binding factor preimage uses H4 and H5" {
@@ -173,8 +157,8 @@ test "Zcash vectors.json binding factor preimage uses H4 and H5" {
     // binding_factor_input for identifier 1.
     const expected_h4 = "ff9b5210ffbb3c07a73a7c8935be4a8c62cf015f6cf7ade6efac09a6513540fc";
     const expected_h5 = "fac8df6fa81b3f4d9ced4be2474894308232dc0be75dbf81f5a103579a823631";
-    const h4 = frost.Ciphersuite.H4(hexToSlice("74657374"));
-    try std.testing.expect(hexEql(expected_h4, &h4));
-    const h5 = frost.Ciphersuite.H5(hexToSlice("00000000000000000000000000000000000000000000000000000000000000010305e62a1d3f57a0b17ade569a3a4043e2a1fc3bd0b102614a8d8cc68e3322ad8903b634c2aed7f85b8eec22e97e5f916ab43a3518821480e15da2af7cffcb060a300000000000000000000000000000000000000000000000000000000000000003036f878da0dc19ba7da9f2d9e795e2674e62ff06c990fc4464cc1ed55a2acce46b025350e2a9e32e7b1fe0161e990623600b2d301b3307641469129cff7936c4d2ce"));
-    try std.testing.expect(hexEql(expected_h5, &h5));
+    const h4 = frost.Ciphersuite.H4(&fromHex(4, "74657374"));
+    try expectHex(32, expected_h4, &h4);
+    const h5 = frost.Ciphersuite.H5(&fromHex(196, "00000000000000000000000000000000000000000000000000000000000000010305e62a1d3f57a0b17ade569a3a4043e2a1fc3bd0b102614a8d8cc68e3322ad8903b634c2aed7f85b8eec22e97e5f916ab43a3518821480e15da2af7cffcb060a300000000000000000000000000000000000000000000000000000000000000003036f878da0dc19ba7da9f2d9e795e2674e62ff06c990fc4464cc1ed55a2acce46b025350e2a9e32e7b1fe0161e990623600b2d301b3307641469129cff7936c4d2ce"));
+    try expectHex(32, expected_h5, &h5);
 }
