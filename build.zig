@@ -120,13 +120,16 @@ pub fn build(b: *std.Build) void {
 
     // Fuzz targets (smoke-run under `zig build test`; fuzzed via
     // `zig build --fuzz=NNN` or `zig build --fuzz`)
-    const fuzz_mod = b.createModule(.{
-        .root_source_file = b.path("tests/fuzz_test.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    fuzz_mod.addImport("bsvz-frost", frost_mod);
-    const fuzz_tests = b.addTest(.{ .root_module = fuzz_mod });
-    const run_fuzz_tests = b.addRunArtifact(fuzz_tests);
-    test_step.dependOn(&run_fuzz_tests.step);
+    // Skip in ReleaseFast/ReleaseSmall as libFuzzer expects different signature
+    if (optimize != .ReleaseFast and optimize != .ReleaseSmall) {
+        const fuzz_mod = b.createModule(.{
+            .root_source_file = b.path("tests/fuzz_test.zig"),
+            .target = target,
+            .optimize = optimize,
+        });
+        fuzz_mod.addImport("bsvz-frost", frost_mod);
+        const fuzz_tests = b.addTest(.{ .root_module = fuzz_mod });
+        const run_fuzz_tests = b.addRunArtifact(fuzz_tests);
+        test_step.dependOn(&run_fuzz_tests.step);
+    }
 }
