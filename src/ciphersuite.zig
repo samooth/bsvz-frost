@@ -31,7 +31,7 @@ fn expandMessageXmd(msg: []const u8, dst: []const u8) [48]u8 {
     dst_prime[dst.len] = @intCast(dst.len);
     const dst_prime_slice = dst_prime[0 .. dst.len + 1];
 
-    const z_pad = [_]u8{0} ** 64; // I2OSP(0, 64)
+    const z_pad = @as([64]u8, @splat(0)); // I2OSP(0, 64)
     const l_i_b_str = [_]u8{ 0x00, 0x30 }; // I2OSP(48, 2)
 
     // b_0 = H(Z_pad || msg || l_i_b_str || I2OSP(0, 1) || DST_prime)

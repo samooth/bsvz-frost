@@ -10,7 +10,7 @@ pub const Identifier = struct {
 
     pub fn fromU16(id: u16) !Identifier {
         if (id == 0) return FrostError.InvalidMinSigners;
-        var bytes = [_]u8{0} ** 32;
+        var bytes = @as([32]u8, @splat(0));
         bytes[30] = @truncate(id >> 8);
         bytes[31] = @truncate(id);
         return Identifier{ .bytes = bytes };

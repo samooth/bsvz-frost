@@ -11,19 +11,19 @@ fn parse(bytes: [32]u8) Scalar {
 
 /// The zero scalar.
 pub fn zero() [32]u8 {
-    return [_]u8{0} ** 32;
+    return @as([32]u8, @splat(0));
 }
 
 /// The one scalar.
 pub fn one() [32]u8 {
-    var bytes = [_]u8{0} ** 32;
+    var bytes = @as([32]u8, @splat(0));
     bytes[31] = 1;
     return bytes;
 }
 
 /// Encode a u64 as a canonical scalar.
 pub fn fromInt(value: u64) [32]u8 {
-    var bytes = [_]u8{0} ** 32;
+    var bytes = @as([32]u8, @splat(0));
     std.mem.writeInt(u64, bytes[24..32], value, .big);
     return bytes;
 }
@@ -36,7 +36,7 @@ pub fn fromBytes(bytes: [32]u8) ![32]u8 {
 
 /// Reduce arbitrary 32 bytes modulo the curve order.
 pub fn reduce(bytes: [32]u8) [32]u8 {
-    var buf: [64]u8 = [_]u8{0} ** 64;
+    var buf = @as([64]u8, @splat(0));
     @memcpy(buf[0..32], &bytes);
     return Scalar.fromBytes64(buf, .big).toBytes(.big);
 }
