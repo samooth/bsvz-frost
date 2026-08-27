@@ -5,7 +5,7 @@
     .minimum_zig_version = "0.15.0",
     .dependencies = .{
         .bsvz = .{
-            .url = "https://github.com/samooth/bsvz/archive/refs/tags/v0.1.0.tar.gz",
+            .url = "https://github.com/samooth/bsvz/archive/6ce3253e12c58a9c978bf74aeea886ade3d3afe3.tar.gz",
             .hash = "bsvz-0.1.0-wvsL-fyNFQAWFhifuU4QuPB1vQ0YIVhBJTVTgitNt7wI",
         },
     },
