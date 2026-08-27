@@ -1,5 +1,7 @@
 # bsvz-frost
 
+![CI](https://github.com/samooth/bsvz-frost/actions/workflows/ci.yml/badge.svg)
+
 FROST (Flexible Round-Optimized Schnorr Threshold) signatures over **secp256k1** with **SHA-256**, implemented in Zig on top of the [bsvz](https://github.com/b-open-io/bsvz) secp256k1 backend.
 
 This is a port of [ZcashFoundation/frost-secp256k1](https://github.com/ZcashFoundation/frost/tree/main/frost-secp256k1) to Zig, designed for integration with the BSV ecosystem via `bsvz` primitives. It is verified **byte-for-byte against the official Zcash test vectors**.
