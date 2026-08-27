@@ -297,8 +297,8 @@ pub const VerifyingKey = struct {
 
 /// Compute Schnorr challenge.
 pub fn challenge(R: *const Element, verifying_key: *const VerifyingKey, msg: []const u8) !Scalar {
-    const r_bytes = group.elementSerialize(R.*) catch [_]u8{0} ** 33;
-    const vk_bytes = group.elementSerialize(verifying_key.element) catch [_]u8{0} ** 33;
+    const r_bytes = group.elementSerialize(R.*) catch @as([33]u8, @splat(0));
+    const vk_bytes = group.elementSerialize(verifying_key.element) catch @as([33]u8, @splat(0));
     var preimage = std.ArrayList(u8).empty;
     defer preimage.deinit(std.heap.page_allocator);
     try preimage.appendSlice(std.heap.page_allocator, &r_bytes);

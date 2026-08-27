@@ -5,7 +5,7 @@ const bsvz = @import("bsvz");
 const Secp256k1 = std.crypto.ecc.Secp256k1;
 
 test "bsvz dependency links" {
-    const g = try bsvz.crypto.Point.basePointMul(.{0} ** 32);
+    const g = try bsvz.crypto.Point.basePointMul(@as([32]u8, @splat(0)));
     try std.testing.expect(g.isIdentity());
 }
 
@@ -136,7 +136,7 @@ test "secret reconstruction" {
 test "nonce determinism from random bytes" {
     const sk = frost.SigningKey.generate();
     const share = frost.SigningShare.fromScalar(sk.scalar);
-    const random_bytes = [_]u8{0xAB} ** 32;
+    const random_bytes = @as([32]u8, @splat(0xAB));
     const n1 = frost.Nonce.nonceGenerateFromRandomBytes(&share, random_bytes);
     const n2 = frost.Nonce.nonceGenerateFromRandomBytes(&share, random_bytes);
     try std.testing.expect(n1.toScalar().equivalent(n2.toScalar()));
