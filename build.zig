@@ -121,7 +121,7 @@ pub fn build(b: *std.Build) void {
     // Fuzz targets (smoke-run under `zig build test`; fuzzed via
     // `zig build --fuzz=NNN` or `zig build --fuzz`)
     // Skip in ReleaseFast/ReleaseSmall as libFuzzer expects different signature
-    if (optimize != .ReleaseFast and optimize != .ReleaseSmall) {
+    if (optimize != std.builtin.OptimizeMode.ReleaseFast and optimize != std.builtin.OptimizeMode.ReleaseSmall) {
         const fuzz_mod = b.createModule(.{
             .root_source_file = b.path("tests/fuzz_test.zig"),
             .target = target,
