@@ -12,7 +12,8 @@ const std = @import("std");
 const frost = @import("bsvz-frost");
 
 /// Deserialize every fixed-width wire type from the input buffer.
-fn fuzzDeserializers(_: void, input: []const u8) anyerror!void {
+fn fuzzDeserializers(allocator: std.mem.Allocator, input: []const u8) anyerror!void {
+    _ = allocator;
     // 32-byte scalar types.
     if (input.len >= 32) {
         const bytes = input[0..32].*;
@@ -62,7 +63,8 @@ fn fuzzDeserializers(_: void, input: []const u8) anyerror!void {
 }
 
 /// Hash functions must accept arbitrary bytes without panicking.
-fn fuzzHashFunctions(_: void, input: []const u8) anyerror!void {
+fn fuzzHashFunctions(allocator: std.mem.Allocator, input: []const u8) anyerror!void {
+    _ = allocator;
     _ = frost.Ciphersuite.H1(input);
     _ = frost.Ciphersuite.H2(input);
     _ = frost.Ciphersuite.H3(input);
@@ -74,7 +76,8 @@ fn fuzzHashFunctions(_: void, input: []const u8) anyerror!void {
 
 /// The byte-scalar arithmetic must behave like arithmetic (never trap on
 /// arbitrary canonical inputs).
-fn fuzzScalarOps(_: void, input: []const u8) anyerror!void {
+fn fuzzScalarOps(allocator: std.mem.Allocator, input: []const u8) anyerror!void {
+    _ = allocator;
     if (input.len < 64) return;
     const a = input[0..32].*;
     const b = input[32..64].*;
@@ -89,13 +92,13 @@ fn fuzzScalarOps(_: void, input: []const u8) anyerror!void {
 }
 
 test "fuzz deserializers" {
-    try std.testing.fuzz(fuzzDeserializers, .{});
+    try std.testing.fuzz(std.testing.allocator, fuzzDeserializers, .{});
 }
 
 test "fuzz hash functions" {
-    try std.testing.fuzz(fuzzHashFunctions, .{});
+    try std.testing.fuzz(std.testing.allocator, fuzzHashFunctions, .{});
 }
 
 test "fuzz scalar ops" {
-    try std.testing.fuzz(fuzzScalarOps, .{});
+    try std.testing.fuzz(std.testing.allocator, fuzzScalarOps, .{});
 }
