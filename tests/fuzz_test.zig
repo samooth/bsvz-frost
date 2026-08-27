@@ -89,13 +89,13 @@ fn fuzzScalarOps(_: void, input: []const u8) anyerror!void {
 }
 
 test "fuzz deserializers" {
-    try std.testing.fuzz({}, fuzzDeserializers, .{});
+    try std.testing.fuzz(fuzzDeserializers, .{});
 }
 
 test "fuzz hash functions" {
-    try std.testing.fuzz({}, fuzzHashFunctions, .{});
+    try std.testing.fuzz(fuzzHashFunctions, .{});
 }
 
 test "fuzz scalar ops" {
-    try std.testing.fuzz({}, fuzzScalarOps, .{});
+    try std.testing.fuzz(fuzzScalarOps, .{});
 }
