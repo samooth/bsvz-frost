@@ -94,7 +94,7 @@ test "duplicate identifiers rejected at keygen" {
 
 test "zero and out-of-range identifiers rejected" {
     try std.testing.expectError(frost.Error.InvalidMinSigners, frost.Identifier.fromU16(0));
-    const all_zero = [_]u8{0} ** 32;
+    const all_zero = @as([32]u8, @splat(0));
     try std.testing.expectError(frost.Error.InvalidMinSigners, frost.Identifier.deserialize(all_zero));
 }
 
@@ -302,23 +302,23 @@ test "identity commitments rejected" {
 
 test "malformed scalars rejected" {
     // 2^256 - 1 is above the curve order -> non-canonical.
-    const non_canonical = [_]u8{0xFF} ** 32;
+    const non_canonical = @as([32]u8, @splat(0xFF));
     try std.testing.expectError(error.NonCanonical, frost.SigningShare.deserialize(non_canonical));
     try std.testing.expectError(error.NonCanonical, frost.field.scalarDeserialize(non_canonical));
 
     // All-zero secret is rejected by SigningKey.
-    const zero = [_]u8{0} ** 32;
+    const zero = @as([32]u8, @splat(0));
     try std.testing.expectError(frost.Error.MalformedSigningKey, frost.SigningKey.deserialize(zero));
 }
 
 test "malformed elements rejected" {
     // 0x05 is not a valid SEC1 encoding prefix.
-    var invalid = [_]u8{0x05} ** 33;
+    var invalid = @as([33]u8, @splat(0x05));
     try std.testing.expectError(error.InvalidEncoding, frost.group.elementDeserialize(invalid));
     try std.testing.expectError(error.InvalidEncoding, frost.VerifyingKey.deserialize(invalid));
 
     // Uncompressed marker (0x04) with a truncated payload.
-    invalid = [_]u8{0x04} ** 33;
+    invalid = @as([33]u8, @splat(0x04));
     try std.testing.expectError(error.InvalidEncoding, frost.group.elementDeserialize(invalid));
 }
 
@@ -363,7 +363,7 @@ test "serialize/deserialize round-trips for all wire types" {
     const vshare_rt = try (&(try frost.VerifyingShare.deserialize(vshare_bytes))).serialize();
     try std.testing.expectEqualSlices(u8, &vshare_bytes, &vshare_rt);
 
-    const nonce = frost.Nonce.nonceGenerateFromRandomBytes(&share, [_]u8{0x42} ** 32);
+    const nonce = frost.Nonce.nonceGenerateFromRandomBytes(&share, @as([32]u8, @splat(0x42)));
     const nonce_bytes = nonce.serialize();
     try std.testing.expectEqualSlices(u8, &nonce_bytes, &(try frost.Nonce.deserialize(nonce_bytes)).serialize());
 
