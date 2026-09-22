@@ -49,9 +49,16 @@ fn runDkg(max_signers: u16, min_signers: u16) !DkgResult {
             if (id.eql(round1_secret[i].identifier)) continue;
             try others.put(id, round1_packages.get(id).?);
         }
-        const r2_secret, const r2_packages = try frost.dkg.part2(&round1_secret[i], &others, allocator);
-        round2_secret[i] = r2_secret;
-        outgoing[i] = r2_packages;
+        switch (try frost.dkg.part2(&round1_secret[i], &others, allocator)) {
+            .ok => |ok| {
+                round2_secret[i] = ok.secret_package;
+                outgoing[i] = ok.outgoing;
+            },
+            .cheaters => |cheater_ids| {
+                allocator.free(cheater_ids);
+                return error.UnexpectedCheater;
+            },
+        }
     }
 
     // Round 3: each participant finalizes with the shares it received.
@@ -77,11 +84,18 @@ fn runDkg(max_signers: u16, min_signers: u16) !DkgResult {
             try r1_others.put(id, round1_packages.get(id).?);
         }
 
-        const kp, var pub_pkg = try frost.dkg.part3(&round2_secret[i], &r1_others, &incoming, allocator);
-        key_packages[i] = kp;
-        // Keep only the last participant's public key package; all agree.
-        if (i < 2) pub_pkg.verifying_shares.deinit();
-        pubkey_package = pub_pkg;
+        switch (try frost.dkg.part3(&round2_secret[i], &r1_others, &incoming, allocator)) {
+            .ok => |ok| {
+                key_packages[i] = ok.key_package;
+                pubkey_package = ok.public_key_package;
+                // Keep only the last participant's public key package; all agree.
+                if (i < 2) pubkey_package.verifying_shares.deinit();
+            },
+            .cheaters => |cheater_ids| {
+                allocator.free(cheater_ids);
+                return error.UnexpectedCheater;
+            },
+        }
     }
 
     return .{ .key_packages = key_packages, .pubkey_package = pubkey_package };

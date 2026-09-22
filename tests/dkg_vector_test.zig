@@ -151,13 +151,35 @@ test "Zcash frost-secp256k1 vectors_dkg.json byte-for-byte" {
             .max_signers = max_signers,
         };
 
-        var round2_secret, var outgoing = try frost.dkg.part2(&round1_secret, &round1_packages, allocator);
+        var round2_secret: frost.dkg.round2.SecretPackage = undefined;
+        var outgoing: std.AutoHashMap(frost.Identifier, frost.dkg.round2.Package) = undefined;
+        switch (try frost.dkg.part2(&round1_secret, &round1_packages, allocator)) {
+            .ok => |ok| {
+                round2_secret = ok.secret_package;
+                outgoing = ok.outgoing;
+            },
+            .cheaters => |cheater_ids| {
+                allocator.free(cheater_ids);
+                return error.UnexpectedCheater;
+            },
+        }
         defer {
             round2_secret.deinit();
             outgoing.deinit();
         }
 
-        const key_package, var pubkey_package = try frost.dkg.part3(&round2_secret, &round1_packages, &round2_packages, allocator);
+        var key_package: frost.KeyPackage = undefined;
+        var pubkey_package: frost.PublicKeyPackage = undefined;
+        switch (try frost.dkg.part3(&round2_secret, &round1_packages, &round2_packages, allocator)) {
+            .ok => |ok| {
+                key_package = ok.key_package;
+                pubkey_package = ok.public_key_package;
+            },
+            .cheaters => |cheater_ids| {
+                allocator.free(cheater_ids);
+                return error.UnexpectedCheater;
+            },
+        }
         defer pubkey_package.verifying_shares.deinit();
 
         // Final signing share and verifying share match the vector.
@@ -232,7 +254,15 @@ test "dkg part2 verifies proof of knowledge" {
         .proof_of_knowledge = valid_proof,
     });
 
-    try std.testing.expectError(frost.Error.InvalidProofOfKnowledge, frost.dkg.part2(&round1_secret, &round1_packages, allocator));
+    // Identifiable abort: the tampered participant must be named, and only it.
+    switch (try frost.dkg.part2(&round1_secret, &round1_packages, allocator)) {
+        .cheaters => |cheater_ids| {
+            defer allocator.free(cheater_ids);
+            try std.testing.expectEqual(@as(usize, 1), cheater_ids.len);
+            try std.testing.expect(cheater_ids[0].eql(other_id));
+        },
+        .ok => return error.ExpectedIdentifiableAbort,
+    }
 }
 
 test "dkg part2 rejects wrong number of packages" {

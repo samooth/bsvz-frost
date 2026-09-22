@@ -175,14 +175,35 @@ pub fn part1(
     return .{ secret_package, package };
 }
 
+/// Result of DKG part 2.
+///
+/// On an identifiable abort the `.cheaters` slice lists the identifiers whose
+/// round-1 packages failed proof-of-knowledge verification — abort the
+/// ceremony and exclude (or penalize) those participants. The caller owns the
+/// slice and must free it with the allocator passed to `part2`.
+pub const Part2Result = union(enum) {
+    ok: Part2Ok,
+    cheaters: []const Identifier,
+};
+
+pub const Part2Ok = struct {
+    secret_package: round2.SecretPackage,
+    outgoing: std.AutoHashMap(Identifier, round2.Package),
+};
+
 /// Part 2 of the DKG: verify every received round 1 package (proof of
 /// knowledge), then compute the share f_i(j) to send to each other
 /// participant j. Keeps f_i(i) for itself.
+///
+/// If any proof of knowledge fails, returns `.cheaters` listing every
+/// offending identifier (identifiable abort) instead of silently aborting on
+/// the first failure. Structural problems (wrong package counts, mismatched
+/// thresholds) still return an error.
 pub fn part2(
     secret_package: *const round1.SecretPackage,
     round1_packages: *const std.AutoHashMap(Identifier, round1.Package),
     allocator: std.mem.Allocator,
-) !struct { round2.SecretPackage, std.AutoHashMap(Identifier, round2.Package) } {
+) !Part2Result {
     if (round1_packages.count() != secret_package.max_signers - 1) {
         return FrostError.IncorrectNumberOfPackages;
     }
@@ -196,16 +217,27 @@ pub fn part2(
         }
     }
 
-    var round2_packages = std.AutoHashMap(Identifier, round2.Package).init(allocator);
-    errdefer round2_packages.deinit();
+    // Round 1, Step 5: verify every sigma_ell. Collect all cheaters so the
+    // abort identifies every malicious participant, not just the first.
+    var cheaters = std.ArrayList(Identifier).empty;
+    errdefer cheaters.deinit(allocator);
     var it2 = round1_packages.iterator();
     while (it2.next()) |entry| {
-        const ell = entry.key_ptr.*;
-        // Round 1, Step 5: verify sigma_ell.
-        try verifyProofOfKnowledge(ell, entry.value_ptr.commitment, &entry.value_ptr.proof_of_knowledge);
-        // Round 2, Step 1: secure share (ell, f_i(ell)).
-        const share = keys.evaluatePolynomial(ell, secret_package.coefficients);
-        try round2_packages.put(ell, .{ .signing_share = SigningShare.fromScalar(share) });
+        verifyProofOfKnowledge(entry.key_ptr.*, entry.value_ptr.commitment, &entry.value_ptr.proof_of_knowledge) catch {
+            try cheaters.append(allocator, entry.key_ptr.*);
+        };
+    }
+    if (cheaters.items.len > 0) {
+        return .{ .cheaters = try cheaters.toOwnedSlice(allocator) };
+    }
+
+    // Round 2, Step 1: secure share (ell, f_i(ell)).
+    var round2_packages = std.AutoHashMap(Identifier, round2.Package).init(allocator);
+    errdefer round2_packages.deinit();
+    var it3 = round1_packages.keyIterator();
+    while (it3.next()) |ell| {
+        const share = keys.evaluatePolynomial(ell.*, secret_package.coefficients);
+        try round2_packages.put(ell.*, .{ .signing_share = SigningShare.fromScalar(share) });
     }
     const fii = keys.evaluatePolynomial(secret_package.identifier, secret_package.coefficients);
 
@@ -216,19 +248,38 @@ pub fn part2(
         .min_signers = secret_package.min_signers,
         .max_signers = secret_package.max_signers,
     };
-    return .{ secret_pkg2, round2_packages };
+    return .{ .ok = .{ .secret_package = secret_pkg2, .outgoing = round2_packages } };
 }
+
+/// Result of DKG part 3.
+///
+/// On an identifiable abort the `.cheaters` slice lists the identifiers whose
+/// round-2 shares did not match their published commitments. The caller owns
+/// the slice and must free it with the allocator passed to `part3`.
+pub const Part3Result = union(enum) {
+    ok: Part3Ok,
+    cheaters: []const Identifier,
+};
+
+pub const Part3Ok = struct {
+    key_package: KeyPackage,
+    public_key_package: PublicKeyPackage,
+};
 
 /// Part 3 of the DKG: verify each received share f_ell(i) against the
 /// sender's commitment, sum them into the long-lived signing share
 /// s_i = sum_ell f_ell(i), and derive the group verifying key from the sum
 /// of all participants' commitments.
+///
+/// Shares that fail VSS verification identify the sender as a cheater: all
+/// such senders are returned in `.cheaters` (identifiable abort) and no key
+/// material is produced. Structural problems still return an error.
 pub fn part3(
     round2_secret_package: *const round2.SecretPackage,
     round1_packages: *const std.AutoHashMap(Identifier, round1.Package),
     round2_packages: *const std.AutoHashMap(Identifier, round2.Package),
     allocator: std.mem.Allocator,
-) !struct { KeyPackage, PublicKeyPackage } {
+) !Part3Result {
     if (round1_packages.count() != round2_secret_package.max_signers - 1) {
         return FrostError.IncorrectNumberOfPackages;
     }
@@ -248,6 +299,8 @@ pub fn part3(
         }
     }
 
+    var cheaters = std.ArrayList(Identifier).empty;
+    errdefer cheaters.deinit(allocator);
     var signing_share = field.scalarZero();
     var it = round2_packages.iterator();
     while (it.next()) |entry| {
@@ -257,10 +310,17 @@ pub fn part3(
         const lhs = group.elementScalarBaseMul(f_ell_i.toScalar());
         const rhs = keys.evaluateVss(round2_secret_package.identifier, commitment.commitment);
         if (!group.elementEql(lhs, rhs)) {
-            return FrostError.InvalidSecretShare;
+            // Identifiable abort: the sender's share does not match its
+            // published commitment; keep checking the remaining senders so
+            // every cheater is reported.
+            try cheaters.append(allocator, entry.key_ptr.*);
+            continue;
         }
         // Round 2, Step 3: accumulate s_i = sum f_ell(i).
         signing_share = field.scalarAdd(signing_share, f_ell_i.toScalar());
+    }
+    if (cheaters.items.len > 0) {
+        return .{ .cheaters = try cheaters.toOwnedSlice(allocator) };
     }
     signing_share = field.scalarAdd(signing_share, round2_secret_package.secret_share);
     const ss = SigningShare.fromScalar(signing_share);
@@ -285,5 +345,5 @@ pub fn part3(
         .verifying_key = public_key_package.verifying_key,
         .min_signers = round2_secret_package.min_signers,
     };
-    return .{ key_package, public_key_package };
+    return .{ .ok = .{ .key_package = key_package, .public_key_package = public_key_package } };
 }

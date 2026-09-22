@@ -4,9 +4,17 @@
 //! shared group commitment; the responses aggregate into a standard Schnorr
 //! signature.
 //!
-//! SECURITY: unlike FROST, this scheme has no binding factors and no
-//! identifiable abort — it is intended for evaluation/interop, not
-//! production. Use the FROST modules for production guarantees.
+//! SECURITY WARNING — NOT PRODUCTION SAFE. Unlike FROST (RFC 9591), this
+//! scheme has:
+//!   - No binding factors: a signer that delays its commitment reveal can
+//!     choose its nonce commitment after seeing the honest signers'
+//!     commitments, enabling grinding attacks on the group commitment.
+//!   - No identifiable abort: an invalid share cannot be attributed to the
+//!     signer that produced it, so cheaters cannot be excluded and the
+//!     session re-run.
+//! Use only for evaluation, interop, and demos — never with real keys.
+//! Production threshold signing must use the FROST modules
+//! (keys / dkg / round1 / round2 / aggregate / frost).
 const std = @import("std");
 const bsvz = @import("bsvz");
 const scalar = @import("scalar.zig");

@@ -25,8 +25,16 @@ pub const group = @import("group.zig");
 // bsvz-interop byte scalars and threshold primitives built on bsvz.crypto
 pub const scalar = @import("scalar.zig");
 pub const shamir = @import("shamir.zig");
+/// ⚠ Naive threshold Schnorr — NO binding factors, NO identifiable abort.
+/// Evaluation/interop only; never use with real keys. See its module docs.
 pub const naive = @import("naive.zig");
 pub const Share = shamir.Share;
+
+// High-level FROST participant state machine (RFC 9591 two-round ceremony)
+pub const frost = @import("frost.zig");
+pub const FrostParticipant = frost.FrostParticipant;
+pub const DkgCeremony = frost.DkgCeremony;
+pub const runFullDkg = frost.runFullDkg;
 
 // Keys module
 pub const keys = @import("keys.zig");

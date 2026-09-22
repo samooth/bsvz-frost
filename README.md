@@ -33,7 +33,8 @@ src/
   field.zig       -- Scalar field operations wrapper
   group.zig       -- secp256k1 group element operations wrapper
   keys.zig        -- Key generation, shares, KeyPackage, PublicKeyPackage
-  dkg.zig         -- Distributed key generation (part1/part2/part3)
+  frost.zig       -- FrostParticipant: high-level DKG + 2-round signing state machine
+  dkg.zig         -- Distributed key generation (part1/part2/part3, identifiable abort)
   round1.zig      -- Nonce generation, SigningNonces, SigningCommitments
   round2.zig      -- SigningPackage, signature share computation
   aggregate.zig   -- Signature aggregation with optional cheater detection
