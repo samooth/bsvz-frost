@@ -31,4 +31,5 @@ pub const FrostError = error{
     IncorrectPackage,
     PackageNotFound,
     InvalidProofOfKnowledge,
+    OutOfMemory,
 };

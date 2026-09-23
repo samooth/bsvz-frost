@@ -89,6 +89,22 @@ pub const SigningNonces = struct {
             .commitments = commitments,
         };
     }
+
+    /// 64 bytes: hiding_nonce(32) ‖ binding_nonce(32). Commitments are
+    /// derived on load via `g^nonce`.
+    pub fn serialize(self: SigningNonces) [64]u8 {
+        var out: [64]u8 = undefined;
+        @memcpy(out[0..32], &self.hiding.serialize());
+        @memcpy(out[32..64], &self.binding.serialize());
+        return out;
+    }
+
+    pub fn deserialize(bytes: [64]u8) !SigningNonces {
+        return fromNonces(
+            try Nonce.deserialize(bytes[0..32].*),
+            try Nonce.deserialize(bytes[32..64].*),
+        );
+    }
 };
 
 /// Published commitments for Round 1.
@@ -98,6 +114,21 @@ pub const SigningCommitments = struct {
 
     pub fn new(hiding: NonceCommitment, binding: NonceCommitment) SigningCommitments {
         return SigningCommitments{ .hiding = hiding, .binding = binding };
+    }
+
+    /// 66 bytes: hiding(33) ‖ binding(33).
+    pub fn serialize(self: SigningCommitments) ![66]u8 {
+        var out: [66]u8 = undefined;
+        @memcpy(out[0..33], &(try self.hiding.serialize()));
+        @memcpy(out[33..66], &(try self.binding.serialize()));
+        return out;
+    }
+
+    pub fn deserialize(bytes: [66]u8) !SigningCommitments {
+        return SigningCommitments{
+            .hiding = try NonceCommitment.deserialize(bytes[0..33].*),
+            .binding = try NonceCommitment.deserialize(bytes[33..66].*),
+        };
     }
 
     pub fn toGroupCommitmentShare(self: SigningCommitments, binding_factor: field.Scalar) group.Element {

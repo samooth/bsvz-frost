@@ -1,0 +1,37 @@
+{
+  "name": "bsvz-frost",
+  "version": "0.1.0",
+  "description": "FROST threshold signature protocol over secp256k1 (WebAssembly module)",
+  "type": "module",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "import": "./index.js"
+    },
+    "./bsvz_frost.wasm": "./bsvz_frost.wasm"
+  },
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "bsvz_frost.wasm"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "(cd .. && zig build wasm -Doptimize=ReleaseSmall) && cp ../zig-out/bin/lib/bsvz-frost.wasm ./bsvz_frost.wasm",
+    "prepack": "npm run build",
+    "test": "npm run build && node run-node.mjs ./bsvz_frost.wasm"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "frost",
+    "threshold-signatures",
+    "secp256k1",
+    "wasm",
+    "cryptography"
+  ],
+  "license": "MIT"
+}

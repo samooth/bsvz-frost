@@ -38,7 +38,7 @@ pub fn aggregate(
     }
     var binding_factor_list = try round2.computeBindingFactorList(signing_package, &pubkeys.verifying_key, std.heap.page_allocator);
     defer binding_factor_list.deinit();
-    const group_commitment = try round2.computeGroupCommitment(signing_package, binding_factor_list);
+    const group_commitment = try round2.computeGroupCommitment(signing_package, &binding_factor_list);
     // Sum signature shares
     var z = field.scalarZero();
     var ss_it = signature_shares.iterator();
@@ -118,7 +118,7 @@ pub fn verifySignatureShare(
 ) !void {
     var binding_factor_list = try round2.computeBindingFactorList(signing_package, verifying_key, std.heap.page_allocator);
     defer binding_factor_list.deinit();
-    const group_commitment = try round2.computeGroupCommitment(signing_package, binding_factor_list);
+    const group_commitment = try round2.computeGroupCommitment(signing_package, &binding_factor_list);
     const challenge = try keys.challenge(&group_commitment, verifying_key, signing_package.message);
     const identifiers = try round2.participatingIdentifiers(signing_package, std.heap.page_allocator);
     defer std.heap.page_allocator.free(identifiers);

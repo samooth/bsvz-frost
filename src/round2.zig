@@ -61,6 +61,59 @@ pub const SigningPackage = struct {
         return self.signing_commitments.get(identifier);
     }
 
+    /// Wire format: count(2) ‖ [encodeGroupCommitments bytes] ‖ msg_len(4) ‖ msg.
+    /// Matches the canonical H5 encoding; `message` is borrowed from the
+    /// input buffer — callers must keep it alive until the package is used.
+    pub fn serialize(self: SigningPackage, allocator: std.mem.Allocator) ![]u8 {
+        var buf = std.ArrayList(u8).empty;
+        errdefer buf.deinit(allocator);
+        var tmp: [2]u8 = undefined;
+        std.mem.writeInt(u16, &tmp, @intCast(self.signing_commitments.count()), .big);
+        try buf.appendSlice(allocator, &tmp);
+        const encoded = try round1.encodeGroupCommitments(self.signing_commitments, allocator);
+        defer allocator.free(encoded);
+        try buf.appendSlice(allocator, encoded);
+        var msg_len: [4]u8 = undefined;
+        std.mem.writeInt(u32, &msg_len, @intCast(self.message.len), .big);
+        try buf.appendSlice(allocator, &msg_len);
+        try buf.appendSlice(allocator, self.message);
+        return buf.toOwnedSlice(allocator);
+    }
+
+    pub fn deserialize(allocator: std.mem.Allocator, bytes: []const u8) !SigningPackage {
+        if (bytes.len < 6) return FrostError.DeserializationFailed;
+        const count = std.mem.readInt(u16, bytes[0..2], .big);
+        const min_len = 2 + count * 98 + 4;
+        if (bytes.len < min_len) return FrostError.DeserializationFailed;
+        var commitments = std.AutoHashMap(Identifier, round1.SigningCommitments).init(allocator);
+        errdefer commitments.deinit();
+        var off: usize = 2;
+        for (0..count) |_| {
+            var id_tmp: [32]u8 = undefined;
+            @memcpy(id_tmp[0..], bytes.ptr[off .. off + 32]);
+            const id = try Identifier.deserialize(id_tmp);
+            off += 32;
+            var comm_tmp: [66]u8 = undefined;
+            @memcpy(comm_tmp[0..], bytes.ptr[off .. off + 66]);
+            const comm = try round1.SigningCommitments.deserialize(comm_tmp);
+            off += 66;
+            try commitments.put(id, comm);
+        }
+        var tmp: [4]u8 = undefined;
+        @memcpy(tmp[0..], bytes.ptr[off..off+4]);
+        const msg_len = std.mem.readInt(u32, &tmp, .big);
+        off += 4;
+        if (bytes.len < off + msg_len) return FrostError.DeserializationFailed;
+        const message = bytes[off..off + msg_len]; // borrowed slice
+        return SigningPackage{ .signing_commitments = commitments, .message = message };
+    }
+
+    /// Free the commitments map. Call after `deserialize`; do NOT call after
+    /// `new` (caller retains ownership of the map passed to `new`).
+    pub fn deinit(self: *SigningPackage) void {
+        self.signing_commitments.deinit();
+    }
+
     /// Compute the raw binding factor preimages (inputs to H1) for each
     /// participant, following `SigningPackage::binding_factor_preimages` in
     /// the reference implementation:
@@ -114,7 +167,7 @@ pub fn computeBindingFactorList(
 }
 
 /// Compute group commitment.
-pub fn computeGroupCommitment(signing_package: *const SigningPackage, binding_factor_list: std.AutoHashMap(Identifier, field.Scalar)) !group.Element {
+pub fn computeGroupCommitment(signing_package: *const SigningPackage, binding_factor_list: *const std.AutoHashMap(Identifier, field.Scalar)) !group.Element {
     var group_commitment = group.identity();
     var it = signing_package.signing_commitments.iterator();
     while (it.next()) |entry| {
@@ -172,13 +225,17 @@ pub fn sign(
         return FrostError.IncorrectNumberOfCommitments;
     }
     const commitment = signing_package.signingCommitment(key_package.identifier) orelse return FrostError.MissingCommitment;
-    if (!std.meta.eql(signer_nonces.commitments, commitment)) {
+    const local_hiding = group.elementSerialize(signer_nonces.commitments.hiding.element) catch return FrostError.InvalidCommitment;
+    const remote_hiding = group.elementSerialize(commitment.hiding.element) catch return FrostError.InvalidCommitment;
+    const local_binding = group.elementSerialize(signer_nonces.commitments.binding.element) catch return FrostError.InvalidCommitment;
+    const remote_binding = group.elementSerialize(commitment.binding.element) catch return FrostError.InvalidCommitment;
+    if (!std.mem.eql(u8, &local_hiding, &remote_hiding) or !std.mem.eql(u8, &local_binding, &remote_binding)) {
         return FrostError.InvalidCommitment;
     }
     var binding_factor_list = try computeBindingFactorList(signing_package, &key_package.verifying_key, std.heap.page_allocator);
     defer binding_factor_list.deinit();
     const binding_factor = binding_factor_list.get(key_package.identifier) orelse return FrostError.UnknownIdentifier;
-    const group_commitment = try computeGroupCommitment(signing_package, binding_factor_list);
+    const group_commitment = try computeGroupCommitment(signing_package, &binding_factor_list);
     const identifiers = try participatingIdentifiers(signing_package, std.heap.page_allocator);
     defer std.heap.page_allocator.free(identifiers);
     const lambda_i = try keys.computeLagrangeCoefficient(identifiers, key_package.identifier);

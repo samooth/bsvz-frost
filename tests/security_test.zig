@@ -297,7 +297,7 @@ test "identity commitments rejected" {
     defer bfs.deinit();
     try bfs.put(kp0.identifier, frost.field.scalarOne());
     try bfs.put(kp1.identifier, frost.field.scalarOne());
-    try std.testing.expectError(frost.Error.IdentityCommitment, frost.round2.computeGroupCommitment(&pkg, bfs));
+    try std.testing.expectError(frost.Error.IdentityCommitment, frost.round2.computeGroupCommitment(&pkg, &bfs));
 }
 
 test "malformed scalars rejected" {

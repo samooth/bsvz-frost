@@ -122,6 +122,43 @@ pub const SecretShare = struct {
         const verifying_key = try self.commitment.verifyingKey();
         return .{ verifying_share, verifying_key };
     }
+
+    /// Wire format: id(32) ‖ share(32) ‖ coeff_count(2) ‖ count × 33.
+    pub fn serialize(self: SecretShare, allocator: std.mem.Allocator) ![]u8 {
+        var buf = std.ArrayList(u8).empty;
+        errdefer buf.deinit(allocator);
+        try buf.appendSlice(allocator, &self.identifier.serialize());
+        try buf.appendSlice(allocator, &self.signing_share.serialize());
+        var tmp: [2]u8 = undefined;
+        std.mem.writeInt(u16, &tmp, @intCast(self.commitment.coefficients.len), .big);
+        try buf.appendSlice(allocator, &tmp);
+        for (self.commitment.coefficients) |coeff| {
+            try buf.appendSlice(allocator, &(try coeff.serialize()));
+        }
+        return buf.toOwnedSlice(allocator);
+    }
+
+    pub fn deserialize(allocator: std.mem.Allocator, bytes: []const u8) !SecretShare {
+        if (bytes.len < 66) return FrostError.DeserializationFailed;
+        const id = try Identifier.deserialize(bytes[0..32].*);
+        const share = try SigningShare.deserialize(bytes[32..64].*);
+        const coeff_count = std.mem.readInt(u16, bytes[64..66], .big);
+        if (bytes.len < 66 + coeff_count * 33) return FrostError.DeserializationFailed;
+        const coeffs = try allocator.alloc(CoefficientCommitment, coeff_count);
+        errdefer allocator.free(@constCast(coeffs));
+        const off: usize = 66;
+        for (coeffs, 0..) |*c, i| {
+            const s = bytes.ptr[off + i * 33 .. off + i * 33 + 33];
+            var tmp: [33]u8 = undefined;
+            @memcpy(tmp[0..], s);
+            c.* = try CoefficientCommitment.deserialize(tmp);
+        }
+        return SecretShare{
+            .identifier = id,
+            .signing_share = share,
+            .commitment = VerifiableSecretSharingCommitment.init(coeffs),
+        };
+    }
 };
 
 /// A FROST keypair for a participant.
@@ -140,6 +177,32 @@ pub const KeyPackage = struct {
             .verifying_share = vs,
             .verifying_key = vk,
             .min_signers = secret_share.commitment.minSigners(),
+        };
+    }
+
+    /// 132 bytes: id(32) ‖ share(32) ‖ vshare(33) ‖ vk(33) ‖ min_signers(2, BE).
+    pub fn serialize(self: KeyPackage) ![132]u8 {
+        var out: [132]u8 = undefined;
+        @memcpy(out[0..32], &self.identifier.serialize());
+        @memcpy(out[32..64], &self.signing_share.serialize());
+        @memcpy(out[64..97], &(try self.verifying_share.serialize()));
+        @memcpy(out[97..130], &(try self.verifying_key.serialize()));
+        std.mem.writeInt(u16, out[130..132], self.min_signers, .big);
+        return out;
+    }
+
+    pub fn deserialize(bytes: [132]u8) !KeyPackage {
+        const id = try Identifier.deserialize(bytes[0..32].*);
+        const share = try SigningShare.deserialize(bytes[32..64].*);
+        const vshare = try VerifyingShare.deserialize(bytes[64..97].*);
+        const vk = try VerifyingKey.deserialize(bytes[97..130].*);
+        const min = std.mem.readInt(u16, bytes[130..132], .big);
+        return KeyPackage{
+            .identifier = id,
+            .signing_share = share,
+            .verifying_share = vshare,
+            .verifying_key = vk,
+            .min_signers = min,
         };
     }
 };
@@ -189,6 +252,60 @@ pub const PublicKeyPackage = struct {
             .min_signers = group_commitment.minSigners(),
         };
     }
+
+    pub fn deinit(self: *PublicKeyPackage) void {
+        self.verifying_shares.deinit();
+    }
+
+    /// Wire format: vk(33) ‖ min(2, 0=null) ‖ count(2) ‖ count × (id(32) ‖ vshare(33)).
+    /// Entries are sorted by ascending identifier bytes.
+    pub fn serialize(self: PublicKeyPackage, allocator: std.mem.Allocator) ![]u8 {
+        var buf = std.ArrayList(u8).empty;
+        errdefer buf.deinit(allocator);
+        try buf.appendSlice(allocator, &(try self.verifying_key.serialize()));
+        var tmp: [2]u8 = undefined;
+        std.mem.writeInt(u16, &tmp, self.min_signers orelse 0, .big);
+        try buf.appendSlice(allocator, &tmp);
+        std.mem.writeInt(u16, &tmp, @intCast(self.verifying_shares.count()), .big);
+        try buf.appendSlice(allocator, &tmp);
+        var ids = std.ArrayList(Identifier).empty;
+        defer ids.deinit(allocator);
+        var it = self.verifying_shares.keyIterator();
+        while (it.next()) |id| try ids.append(allocator, id.*);
+        std.mem.sort(Identifier, ids.items, {}, idLessThan);
+        for (ids.items) |id| {
+            try buf.appendSlice(allocator, &id.serialize());
+            try buf.appendSlice(allocator, &(try self.verifying_shares.get(id).?.serialize()));
+        }
+        return buf.toOwnedSlice(allocator);
+    }
+
+    pub fn deserialize(allocator: std.mem.Allocator, bytes: []const u8) !PublicKeyPackage {
+        if (bytes.len < 37) return FrostError.DeserializationFailed;
+        const vk = try VerifyingKey.deserialize(bytes[0..33].*);
+        const min = std.mem.readInt(u16, bytes[33..35], .big);
+        const count = std.mem.readInt(u16, bytes[35..37], .big);
+        if (bytes.len < 37 + count * 65) return FrostError.DeserializationFailed;
+        var shares = std.AutoHashMap(Identifier, VerifyingShare).init(allocator);
+        errdefer shares.deinit();
+        var off: usize = 37;
+        for (0..count) |_| {
+            var id_tmp: [32]u8 = undefined;
+            @memcpy(id_tmp[0..], bytes.ptr[off .. off + 32]);
+            const id = try Identifier.deserialize(id_tmp);
+            off += 32;
+            var vs_tmp: [33]u8 = undefined;
+            @memcpy(vs_tmp[0..], bytes.ptr[off .. off + 33]);
+            const vs = try VerifyingShare.deserialize(vs_tmp);
+            off += 33;
+            try shares.put(id, vs);
+        }
+        return PublicKeyPackage{
+            .verifying_shares = shares,
+            .verifying_key = vk,
+            .min_signers = if (min == 0) null else min,
+        };
+    }
 };
 
 fn idLessThan(_: void, a: Identifier, b: Identifier) bool {
@@ -218,14 +335,13 @@ pub const SigningKey = struct {
 
     pub fn generate() SigningKey {
         var bytes: [32]u8 = undefined;
-        field.randomBytes(&bytes);
-        const s = Secp256k1.scalar.Scalar.fromBytes(bytes, .big) catch Secp256k1.scalar.Scalar.zero;
-        // Ensure non-zero
-        if (s.isZero()) {
-            bytes[31] = 1;
+        var attempts: usize = 0;
+        while (attempts < 100) : (attempts += 1) {
+            field.randomBytes(&bytes);
+            const s = Secp256k1.scalar.Scalar.fromBytes(bytes, .big) catch continue;
+            if (!s.isZero()) return SigningKey{ .scalar = s };
         }
-        const scalar = Secp256k1.scalar.Scalar.fromBytes(bytes, .big) catch Secp256k1.scalar.Scalar.zero;
-        return SigningKey{ .scalar = scalar };
+        return SigningKey{ .scalar = Secp256k1.scalar.Scalar.zero };
     }
 
     pub fn fromScalar(scalar: Scalar) !SigningKey {

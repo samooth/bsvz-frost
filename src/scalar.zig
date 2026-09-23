@@ -44,7 +44,11 @@ pub fn reduce(bytes: [32]u8) [32]u8 {
 /// Generate a random scalar.
 pub fn random() [32]u8 {
     var buf: [64]u8 = undefined;
-    std.Io.Threaded.global_single_threaded.io().random(&buf);
+    if (@hasDecl(@import("root"), "frost_random_bytes")) {
+        @import("root").frost_random_bytes(&buf, buf.len);
+    } else {
+        std.Io.Threaded.global_single_threaded.io().random(&buf);
+    }
     return Scalar.fromBytes64(buf, .big).toBytes(.big);
 }
 

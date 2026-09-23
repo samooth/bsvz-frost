@@ -6,8 +6,16 @@ const FrostError = @import("error.zig").FrostError;
 pub const Scalar = Secp256k1.scalar.Scalar;
 
 /// Fill a buffer with cryptographically secure random bytes.
+///
+/// On WASM/freestanding builds, provide entropy by declaring
+/// `pub fn frost_random_bytes(buffer: []u8) void` in the root module
+/// (e.g. `src/wasm.zig`). Zig's comptime hook picks it up automatically.
 pub fn randomBytes(buffer: []u8) void {
-    std.Io.Threaded.global_single_threaded.io().random(buffer);
+    if (@hasDecl(@import("root"), "frost_random_bytes")) {
+        @import("root").frost_random_bytes(buffer.ptr, buffer.len);
+    } else {
+        std.Io.Threaded.global_single_threaded.io().random(buffer);
+    }
 }
 
 pub fn scalarZero() Scalar {
@@ -20,8 +28,13 @@ pub fn scalarOne() Scalar {
 
 pub fn scalarRandom() Scalar {
     var bytes: [32]u8 = undefined;
-    randomBytes(&bytes);
-    return Secp256k1.scalar.Scalar.fromBytes(bytes, .big) catch scalarZero();
+    var attempts: usize = 0;
+    while (attempts < 100) : (attempts += 1) {
+        randomBytes(&bytes);
+        const s = Secp256k1.scalar.Scalar.fromBytes(bytes, .big) catch continue;
+        if (!s.isZero()) return s;
+    }
+    return scalarZero();
 }
 
 pub fn scalarInvert(s: Scalar) !Scalar {

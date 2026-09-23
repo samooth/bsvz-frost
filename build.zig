@@ -132,4 +132,47 @@ pub fn build(b: *std.Build) void {
         const run_fuzz_tests = b.addRunArtifact(fuzz_tests);
         test_step.dependOn(&run_fuzz_tests.step);
     }
+
+    // ── WebAssembly module (wasm32-freestanding, browser + Node)
+    const wasm_target = b.resolveTargetQuery(.{ .cpu_arch = .wasm32, .os_tag = .freestanding });
+    const wasm_mod = b.createModule(.{
+        .root_source_file = b.path("src/wasm.zig"),
+        .target = wasm_target,
+        .optimize = optimize,
+        .single_threaded = true,
+        .link_libc = false,
+    });
+    wasm_mod.addImport("bsvz", bsvz_mod);
+    wasm_mod.export_symbol_names = &[_][]const u8{
+        "frost_version",
+        "frost_seed",
+        "frost_seed_buffer",
+        "frost_random_bytes",
+        "frost_alloc",
+        "frost_dealloc",
+        "frost_out_ptr",
+        "frost_out_len",
+        "frost_out_err",
+        "frost_keygen",
+        "frost_keypackage_from_share",
+        "frost_round1_commit",
+        "frost_round2_sign",
+        "frost_aggregate",
+        "frost_verify",
+        "frost_reconstruct",
+        "frost_dkg_part1",
+        "frost_dkg_part2",
+        "frost_dkg_part3",
+    };
+    const wasm_exe = b.addExecutable(.{
+        .name = "bsvz-frost-wasm",
+        .root_module = wasm_mod,
+    });
+    wasm_exe.entry = .disabled;
+    wasm_exe.export_memory = true;
+    const install_wasm = b.addInstallArtifact(wasm_exe, .{
+        .dest_sub_path = "lib/bsvz-frost.wasm",
+    });
+    const wasm_step = b.step("wasm", "Build WebAssembly module into zig-out/bin/lib/bsvz-frost.wasm");
+    wasm_step.dependOn(&install_wasm.step);
 }
