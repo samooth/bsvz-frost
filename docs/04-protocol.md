@@ -2,7 +2,9 @@
 
 This document walks through the FROST protocol as implemented, mirroring the
 Zcash `frost-core` logic. Key generation can be done by a **trusted dealer**
-or **distributed** (DKG, no trusted party); see §9.
+or **distributed** (DKG, no trusted party); see §9. The WebAssembly boundary
+exposes the same operations over the byte layouts in
+[10-wire-formats.md](10-wire-formats.md).
 
 ## Notation
 

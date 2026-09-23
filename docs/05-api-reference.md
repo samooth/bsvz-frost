@@ -4,6 +4,11 @@ All public symbols are re-exported from `@import("bsvz-frost")`. Types use the
 stdlib `Secp256k1` scalar/point types; interop helpers use `[32]u8` big-endian
 byte scalars.
 
+The WebAssembly export surface and the JavaScript `createFrost` API are
+documented separately in [09-webassembly.md](09-webassembly.md) and
+[11-js-package.md](11-js-package.md); byte layouts on that boundary are in
+[10-wire-formats.md](10-wire-formats.md).
+
 ## `Error`
 
 `FrostError` error set (`error.zig`):
@@ -18,7 +23,7 @@ InvalidZeroScalar, InvalidIdentityElement, InvalidCoefficient,
 SerializationFailed, DeserializationFailed, DkgNotSupported,
 IdentifierDerivationNotSupported, RandomnessError, InvalidNonce,
 IncorrectNumberOfPackages, IncorrectPackage, PackageNotFound,
-InvalidProofOfKnowledge
+InvalidProofOfKnowledge, OutOfMemory
 ```
 
 ## `Identifier`

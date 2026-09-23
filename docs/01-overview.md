@@ -61,6 +61,8 @@ src/
   scalar.zig      -- [32]u8 big-endian byte-scalar arithmetic (bsvz interop)
   shamir.zig      -- Plain Shamir split/reconstruct (byte scalars)
   naive.zig       -- Naive threshold Schnorr (evaluation only, not FROST)
+  frost.zig       -- FrostParticipant: high-level DKG + signing state machine
+  wasm.zig        -- WebAssembly ABI for browser/Node (see 09-webassembly.md)
   demo.zig        -- CLI demo: trusted dealer + full 3-of-5 signing flow
   tests.zig       -- Unit tests
 
@@ -72,6 +74,12 @@ tests/
   dkg_test.zig       -- Functional DKG: 3-party flow + threshold sign
   dkg_vector_test.zig -- Zcash official vectors_dkg.json interop test
   fuzz_test.zig      -- std.testing.fuzz targets
+
+js/
+  index.js         -- JS wrapper over the wasm module (createFrost API)
+  index.d.ts       -- TypeScript declarations
+  run-node.mjs     -- Node smoke test (full protocol round-trip)
+  package.json     -- npm package metadata
 ```
 
 ## Two layers of primitives
@@ -97,3 +105,10 @@ tests/
   commitment encoding, binding-factor preimages, signature format).
 - **Not** compatible with BIP-340 (Taproot) Schnorr signatures — those use a
   different hash domain and even-y-only points.
+
+## WebAssembly / JavaScript
+
+The same protocol modules build to `wasm32-freestanding` (`src/wasm.zig`) and
+are wrapped by an ES module in `js/` for browser and Node.js hosts. See
+[09-webassembly.md](09-webassembly.md), [10-wire-formats.md](10-wire-formats.md),
+and [11-js-package.md](11-js-package.md).

@@ -118,4 +118,6 @@ The key intermediate values can be re-derived independently:
 
 All 45 tests pass in Debug and ReleaseSafe, including the five vector interop
 tests (two signing + three DKG). The port matches the Zcash reference at every
-observable byte.
+observable byte. The WebAssembly module runs the same protocol code and is
+additionally smoke-tested end-to-end by `npm test` in `js/` (see
+[11-js-package.md](11-js-package.md)).

@@ -36,6 +36,11 @@ formal proof; see the
   `field.randomBytes` uses the stdlib secure RNG via the Io layer.
 - Secret shares and group secrets (`SigningKey.generate`) also require a
   strong RNG.
+- **WebAssembly hosts must seed the module** before any keygen / DKG / nonce
+  operation (`frost.seed()` in the JS package, or the `frost_seed_buffer` +
+  `frost_seed` exports). An unseeded wasm module returns **zero** bytes from
+  its CSPRNG — keys and nonces would be fully predictable. See
+  [09-webassembly.md](09-webassembly.md#entropy-host-seeding).
 
 ## Communication channels
 
@@ -89,6 +94,10 @@ formal proof; see the
 - The library does not implement side-channel hardening beyond what Zig's
   stdlib `Secp256k1` provides; deployment on devices should be reviewed
   against the local threat model.
+- The WebAssembly build runs in a shared linear memory under host control;
+  the JS wrapper copies results out immediately, but hosts using the raw ABI
+  must follow the out-slot rules in
+  [09-webassembly.md](09-webassembly.md) or results will be clobbered.
 
 ## Production readiness
 

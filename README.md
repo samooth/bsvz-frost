@@ -21,6 +21,7 @@ This is a port of [ZcashFoundation/frost-secp256k1](https://github.com/ZcashFoun
 - **Single Schnorr Signing**: Standard non-threshold Schnorr signatures
 - **Zcash Interop**: Byte-for-byte compatible with `ZcashFoundation/frost-secp256k1` (RFC 9380 `hash_to_field` hashing), proven by official test-vector tests (signing and DKG)
 - **BSV-Ready**: Uses secp256k1 and SHA-256, the same primitives as Bitcoin SV
+- **WebAssembly / JS**: `zig build wasm` produces a `wasm32-freestanding` module for browsers and Node; the `js/` package wraps it with a typed `createFrost` API
 
 ## Architecture
 
@@ -39,6 +40,7 @@ src/
   round2.zig      -- SigningPackage, signature share computation
   aggregate.zig   -- Signature aggregation with optional cheater detection
   signature.zig   -- Schnorr signature (R, z) type
+  wasm.zig        -- WebAssembly ABI (browser/Node); see docs/09-webassembly.md
   demo.zig        -- CLI demo: 3-of-5 trusted dealer + full signing flow
   tests.zig       -- Comprehensive unit tests
 tests/
@@ -49,6 +51,10 @@ tests/
   dkg_test.zig      -- Functional DKG: 3-party flow + threshold sign
   dkg_vector_test.zig -- Interop: official Zcash vectors_dkg.json
   fuzz_test.zig    -- 3 fuzz targets (deserializers, hashes, scalar ops)
+js/
+  index.js         -- createFrost JS API over the wasm module
+  index.d.ts       -- TypeScript declarations
+  run-node.mjs     -- Node smoke test (full protocol round-trip)
 ```
 
 ## Quick Start
@@ -63,6 +69,14 @@ zig build run
 
 ```bash
 zig build test
+```
+
+### Build the WebAssembly Module
+
+```bash
+zig build wasm            # → zig-out/bin/lib/bsvz-frost.wasm
+cd js && npm run build    # → js/bsvz_frost.wasm
+cd js && npm test         # Node smoke test
 ```
 
 ### Use as a Dependency
@@ -169,6 +183,9 @@ Full documentation lives in the [`docs/`](docs/README.md) folder:
 - [Zcash Interop](docs/06-interop.md) — test-vector verification and the bugs it caught
 - [Security Notes](docs/07-security.md) — nonce discipline, threat model, limitations
 - [Testing Guide](docs/08-testing.md) — negative/property tests, fuzz targets, how to run
+- [WebAssembly](docs/09-webassembly.md) — wasm ABI, exports, error codes, host entropy
+- [Wire Formats](docs/10-wire-formats.md) — byte layouts for every type and blob
+- [JavaScript Package](docs/11-js-package.md) — createFrost API, Node/browser usage, smoke test
 
 ## Specification
 

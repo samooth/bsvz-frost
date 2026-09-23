@@ -95,3 +95,16 @@ zig test tests/security_test.zig     # single binary (must run via `zig build`
 ```
 
 `zig fmt --check src/ tests/ build.zig` keeps formatting clean.
+
+## JavaScript smoke test
+
+```bash
+cd js && npm test
+```
+
+Rebuilds the wasm module (`zig build wasm -Doptimize=ReleaseSmall`), copies it
+into `js/`, and runs `run-node.mjs` under Node ≥ 18: trusted-dealer keygen,
+rounds 1–2, aggregation, verification (including negative cases),
+reconstruction, full 3-party DKG, error-code assertions, and the low-level
+alloc/free API. Expected output: `wasm-test OK: FROST protocol round-trips
+correctly`. See [11-js-package.md](11-js-package.md).

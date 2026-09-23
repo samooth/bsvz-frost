@@ -49,6 +49,20 @@ The vector test is the key compatibility proof: it rebuilds the whole signing
 flow from the Zcash fixture's fixed nonce randomness and asserts byte-for-byte
 equality at every stage (see [06-interop.md](06-interop.md)).
 
+## WebAssembly build & JS package
+
+```bash
+zig build wasm                        # → zig-out/bin/lib/bsvz-frost.wasm
+cd js && npm run build                # ReleaseSmall build → js/bsvz_frost.wasm
+cd js && npm test                     # Node smoke test (full protocol round-trip)
+```
+
+`npm test` rebuilds the module and runs a Node ≥ 18 script that exercises
+trusted-dealer keygen, both signing rounds, aggregation, verification,
+reconstruction, and a full 3-party DKG. See
+[09-webassembly.md](09-webassembly.md) for the wasm ABI and
+[11-js-package.md](11-js-package.md) for the JS API.
+
 ## Fuzzing
 
 The three `std.testing.fuzz` targets (wire deserializers, hash functions, and
