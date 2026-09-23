@@ -3,7 +3,7 @@
 Everything non-obvious discovered while making `bsvz-frost` **byte-for-byte
 compatible with the official ZcashFoundation/frost-secp256k1 reference** instead
 of just "internally consistent". Environment: Zig 0.16.0-dev.2535+b5bd49460,
-reference repo cloned to `a scratch directory`.
+reference repo cloned to a scratch directory.
 
 ## The big lesson: "works" ≠ "compatible"
 
