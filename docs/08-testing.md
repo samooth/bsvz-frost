@@ -2,12 +2,13 @@
 
 ## Test binaries
 
-`zig build test` runs eight binaries under one step (45 tests, green in Debug
-and ReleaseSafe):
+`zig build test` runs eight binaries under one step (48 tests in Debug and
+ReleaseSafe, green on Zig 0.16.0 and 0.17.0; 45 in ReleaseFast/ReleaseSmall,
+where the fuzz binary is skipped):
 
 | Binary | Focus | Count |
 |--------|-------|-------|
-| `src/tests.zig` | Unit tests for the FROST modules | 13 |
+| `src/tests.zig` | Unit tests for the FROST modules | 16 |
 | `tests/naive_test.zig` | End-to-end threshold signing on real bsvz | 2 |
 | `tests/shamir_test.zig` | Shamir split/reconstruct | 2 |
 | `tests/vector_test.zig` | Official Zcash `vectors.json` byte-for-byte interop | 2 |
@@ -66,7 +67,8 @@ round-1 packages is rejected with `IncorrectNumberOfPackages`.
 
 ## Fuzz targets (`fuzz_test.zig`)
 
-Three `std.testing.fuzz` targets:
+Three `std.testing.fuzz` targets (the callbacks adapt to both the pre-stable
+`[]const u8` API and the stable `*std.testing.Smith` API):
 
 1. `fuzzDeserializers` — round-trip property for every wire type
    (identifier, scalar, element, commitment, signing share, signature).
@@ -74,8 +76,8 @@ Three `std.testing.fuzz` targets:
 3. `fuzzScalarOps` — byte-level scalar arithmetic checked via canonical
    `reduce`.
 
-On Zig 0.16.0-dev, coverage-guided fuzzing is not yet runnable: `zig build
---fuzz=N` crashes in the build runner itself (double-free in
+On some Zig 0.16/0.17 toolchains, coverage-guided fuzzing is not runnable:
+`zig build --fuzz=N` crashes in the build runner itself (double-free in
 `std.Build.Step.Run.rerunInFuzzMode`, in `Fuzz.zig`/`Run.zig`, not in this
 library). Until that is fixed, the targets are exercised through `zig build
 test`, which runs each `fuzz` target once with its corpus (and an empty seed

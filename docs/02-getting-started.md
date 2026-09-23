@@ -2,8 +2,12 @@
 
 ## Requirements
 
-- **Zig 0.16.0-dev.2535+b5bd49460** (the version the project builds and tests
-  against; the build system uses the modern `root_module` Build API).
+- **Zig 0.16.0 or 0.17.0** (both verified: full test suite, demo, wasm build,
+  and Node smoke test green). Older `0.16.0-dev` snapshots from before the
+  stable `std.testing.fuzz`/`Smith` API also work — the fuzz targets detect
+  which API the toolchain provides. The build system uses the modern
+  `root_module` Build API (`minimum_zig_version` in `build.zig.zon` is
+  `0.15.0`).
 - Network access for the first build (fetches the pinned `b-open-io/bsvz`
   dependency).
 
@@ -31,11 +35,13 @@ zig build test                 # Debug
 zig build test -Doptimize=ReleaseSafe
 ```
 
-This runs all eight test binaries under one step:
+This runs all eight test binaries under one step (48 tests in Debug /
+ReleaseSafe; 45 in ReleaseFast/ReleaseSmall, where the three fuzz targets are
+skipped):
 
 | Binary | Contents | Count |
 |--------|----------|-------|
-| `src/tests.zig` | Unit tests for the FROST modules | 13 |
+| `src/tests.zig` | Unit tests for the FROST modules | 16 |
 | `tests/naive_test.zig` | Naive threshold signing on real bsvz | 2 |
 | `tests/shamir_test.zig` | Shamir split/reconstruct | 2 |
 | `tests/vector_test.zig` | Official Zcash `vectors.json` interop | 2 |
@@ -43,7 +49,7 @@ This runs all eight test binaries under one step:
 | `tests/dkg_test.zig` | Functional DKG: 3-party flow + threshold sign | 2 |
 | `tests/dkg_vector_test.zig` | Official Zcash `vectors_dkg.json` interop | 3 |
 | `tests/fuzz_test.zig` | Fuzz targets (smoke-run with corpus + empty input) | 3 |
-| **Total** | | **45** |
+| **Total (Debug)** | | **48** |
 
 The vector test is the key compatibility proof: it rebuilds the whole signing
 flow from the Zcash fixture's fixed nonce randomness and asserts byte-for-byte
@@ -66,10 +72,10 @@ reconstruction, and a full 3-party DKG. See
 ## Fuzzing
 
 The three `std.testing.fuzz` targets (wire deserializers, hash functions, and
-scalar operations) are registered as fuzz steps. On the current Zig
-0.16.0-dev toolchain, `zig build --fuzz=N` crashes in the build runner itself
-(a double-free in `std.Build.Step.Run.rerunInFuzzMode`), so coverage-guided
-fuzzing is not yet runnable here. The targets still execute their corpus and
+scalar operations) are registered as fuzz steps. On some Zig 0.16/0.17
+toolchains, `zig build --fuzz=N` crashes in the build runner itself (a
+double-free in `std.Build.Step.Run.rerunInFuzzMode`), so coverage-guided
+fuzzing may not be runnable there. The targets still execute their corpus and
 an empty seed under `zig build test` (the 3 fuzz entries above), so the
 corpus is exercised in CI even without libFuzzer. Once the toolchain bug is
 fixed, run:

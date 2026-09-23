@@ -116,8 +116,9 @@ The key intermediate values can be re-derived independently:
 
 ## Status
 
-All 45 tests pass in Debug and ReleaseSafe, including the five vector interop
-tests (two signing + three DKG). The port matches the Zcash reference at every
-observable byte. The WebAssembly module runs the same protocol code and is
-additionally smoke-tested end-to-end by `npm test` in `js/` (see
+All 48 tests pass in Debug and ReleaseSafe (45 in ReleaseFast, where the
+fuzz binary is skipped) on Zig 0.16.0 and 0.17.0, including the five vector
+interop tests (two signing + three DKG). The port matches the Zcash reference
+at every observable byte. The WebAssembly module runs the same protocol code
+and is additionally smoke-tested end-to-end by `npm test` in `js/` (see
 [11-js-package.md](11-js-package.md)).

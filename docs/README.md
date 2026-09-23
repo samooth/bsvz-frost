@@ -27,7 +27,7 @@ test vectors**.
 
 - **Ciphersuite**: FROST(secp256k1, SHA-256) — `CONTEXT_STRING = "FROST-secp256k1-SHA256-v1"`.
 - **NOT BIP-340 / Taproot compatible**; use `frost-secp256k1-tr` for that.
-- **Language**: Zig 0.16.0-dev.2535.
+- **Language**: Zig 0.16.0 / 0.17.0 (both verified; also builds on earlier `0.16.0-dev` snapshots).
 - **Dependency**: `b-open-io/bsvz` (pinned via `build.zig.zon`).
 - **WebAssembly / JS**: `zig build wasm` → `src/wasm.zig` (`wasm32-freestanding`); wrapper package in `js/` (Node ≥ 18 + browsers), smoke-tested by `npm test`.
-- **Tests**: 45 Zig tests (13 unit + 2 naive + 2 shamir + 2 Zcash vector interop + 18 negative/property + 2 DKG functional + 3 DKG vector interop + 3 fuzz), green in Debug and ReleaseSafe, plus the Node wasm smoke test.
+- **Tests**: 48 Zig tests in Debug/ReleaseSafe (16 unit + 2 naive + 2 shamir + 2 Zcash vector interop + 18 negative/property + 2 DKG functional + 3 DKG vector interop + 3 fuzz); 45 in ReleaseFast/ReleaseSmall (fuzz targets skipped), plus the Node wasm smoke test.

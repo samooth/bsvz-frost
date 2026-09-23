@@ -14,8 +14,8 @@ npm run build   # zig build wasm -Doptimize=ReleaseSmall + copy to ./bsvz_frost.
 npm test        # rebuild, then run the Node smoke test (full protocol round-trip)
 ```
 
-Requirements: Zig 0.16.0-dev on `PATH` (for the build step) and Node ≥ 18
-(ESM + `WebAssembly` + `globalThis.crypto`). The packaged files are
+Requirements: Zig 0.16.0 or 0.17.0 on `PATH` (for the build step) and
+Node ≥ 18 (ESM + `WebAssembly` + `globalThis.crypto`). The packaged files are
 `index.js`, `index.d.ts`, and `bsvz_frost.wasm` (the `.wasm` is gitignored —
 always run `npm run build` / `prepack` before publishing).
 
