@@ -1,4 +1,4 @@
-//! WASM root module for bsvz-frost (wasm32-wasi, browser + Node).
+//! WASM root module for bsvz-frost (wasm32-freestanding, browser + Node).
 //!
 //! ABI (stable across 0.1.x):
 //!   Memory:   frost_alloc / frost_dealloc  (wasm-managed, JS must free inputs)
@@ -7,6 +7,9 @@
 //!             On ok: result bytes are in the out-slot; JS must copy before
 //!             the next op overwrites them. On identifiable abort (>0): the
 //!             out-slot contains [count u16][count x id32].
+//!
+//! Error codes are a stable ABI shared with the JS package (ErrorCode table
+//! in the JS API). Never renumber existing codes; only append new ones.
 const std = @import("std");
 const FrostError = @import("error.zig").FrostError;
 const Identifier = @import("identifier.zig").Identifier;
@@ -19,10 +22,11 @@ const dkg = @import("dkg.zig");
 const field = @import("field.zig");
 const group = @import("group.zig");
 
-// ── Wasm allocator (WasmAllocator over memory.grow, requires -fsingle-threaded)
+// Wasm allocator: WasmAllocator over memory.grow; requires -fsingle-threaded.
 var wasm_allocator = std.heap.wasm_allocator;
 
-// ── Stable error codes (mirrored in JS/src/wasm.ts)
+/// Stable error codes exposed across the WASM boundary. The JS package maps
+/// these 1:1 onto its ErrorCode table; never renumber, only append.
 pub const WasmError = enum(i32) {
     ok = 0,
     invalid_min_signers = 1,
@@ -56,6 +60,7 @@ pub const WasmError = enum(i32) {
     unknown = 127,
 };
 
+/// Map a library error (FrostError or std crypto) onto a stable WasmError code.
 fn toWasm(err: anyerror) i32 {
     return switch (err) {
         FrostError.InvalidMinSigners => @intFromEnum(WasmError.invalid_min_signers),
@@ -96,10 +101,14 @@ fn toWasm(err: anyerror) i32 {
     };
 }
 
-// ── Result slot (single global — JS copies bytes after each op)
+// Result slot: single global buffer holding the last operation's output.
+// JS reads frost_out_ptr/len/err after every call and must copy before the
+// next op overwrites it.
 var out_data: []u8 = &.{};
 var out_err: i32 = 0;
 
+/// Replace the out-slot contents with `bytes` (duped into wasm memory) and
+/// record `err`. Frees any previous out-slot allocation.
 fn out_set(bytes: []const u8, err: i32) void {
     if (out_data.len > 0) wasm_allocator.free(out_data);
     out_data = &.{};
@@ -111,17 +120,22 @@ fn out_set(bytes: []const u8, err: i32) void {
     };
 }
 
-// ── Entropy for freestanding targets (web wasm)
-// Host MUST call frost_seed before the first operation that samples randomness.
+// Entropy for freestanding targets (web wasm / browser / Node).
+// The host MUST call frost_seed before the first operation that samples
+// randomness; without it, frost_random_bytes zeroes the buffer.
 const host_seed_capacity = 64;
 var host_seed: [host_seed_capacity]u8 = undefined;
 var host_seed_len: usize = 0;
 var csprng: ?std.Random.DefaultCsprng = null;
 
+/// Return a pointer to the 64-byte host seed buffer. The host writes its
+/// entropy here, then calls frost_seed(len).
 export fn frost_seed_buffer() [*]u8 {
     return &host_seed;
 }
 
+/// Initialise the CSPRNG from the first `len` bytes of the host seed buffer.
+/// Call once after writing entropy via frost_seed_buffer.
 export fn frost_seed(len: usize) void {
     if (len > host_seed_capacity) return;
     host_seed_len = len;
@@ -131,6 +145,8 @@ export fn frost_seed(len: usize) void {
     csprng = std.Random.DefaultCsprng.init(seed);
 }
 
+/// Fill `buffer` with CSPRNG bytes. Hooks the comptime entropy lookup used by
+/// field.zig / scalar.zig. Returns zeros if frost_seed has not been called.
 pub export fn frost_random_bytes(buffer: [*]u8, len: usize) void {
     if (csprng) |*c| {
         c.random().bytes(buffer[0..len]);
@@ -139,17 +155,19 @@ pub export fn frost_random_bytes(buffer: [*]u8, len: usize) void {
     }
 }
 
-// ── Memory management exports
+// Memory management exports: JS allocates input buffers with frost_alloc,
+// writes bytes into linear memory, then frees them with frost_dealloc.
 export fn frost_alloc(len: usize) ?[*]u8 {
     const slice = wasm_allocator.alloc(u8, len) catch return null;
     return slice.ptr;
 }
 
+/// Free a buffer previously returned by frost_alloc (same len required).
 export fn frost_dealloc(ptr: [*]u8, len: usize) void {
     wasm_allocator.free(ptr[0..len]);
 }
 
-// ── Result accessors
+// Result accessors: read the last operation's out-slot.
 export fn frost_out_ptr() [*]const u8 {
     return out_data.ptr;
 }
@@ -160,11 +178,13 @@ export fn frost_out_err() i32 {
     return out_err;
 }
 
+/// Module protocol version string (null-terminated C string).
 export fn frost_version() [*:0]const u8 {
     return "0.1.0-wasm1";
 }
 
-// ── DKG internal cleanup (dkg.zig uses wasm_allocator directly)
+// DKG package cleanup helpers. dkg.zig allocates heap fields with
+// wasm_allocator directly, so the wasm layer frees them here.
 fn freeRound1Secret(s: *const dkg.round1.SecretPackage) void {
     wasm_allocator.free(@constCast(s.coefficients));
     wasm_allocator.free(@constCast(s.commitment.coefficients));
@@ -176,7 +196,8 @@ fn freeRound1Package(p: *const dkg.round1.Package) void {
     wasm_allocator.free(@constCast(p.commitment.coefficients));
 }
 
-// ── Helpers
+// Helpers: little/big-endian appenders and bounds-checked slice copies used
+// when building wire-format blobs for the out-slot.
 fn listAppendU16(buf: *std.ArrayList(u8), value: u16) !void {
     var tmp: [2]u8 = undefined;
     std.mem.writeInt(u16, &tmp, value, .big);
@@ -188,12 +209,14 @@ fn listAppendU32(buf: *std.ArrayList(u8), value: u32) !void {
     try buf.appendSlice(wasm_allocator, &tmp);
 }
 
+/// Copy 33 bytes starting at `off`; DeserializationFailed if out of range.
 fn as33(bytes: []const u8, off: usize) ![33]u8 {
     if (bytes.len < off + 33) return FrostError.DeserializationFailed;
     var tmp: [33]u8 = undefined;
     @memcpy(tmp[0..33], bytes[off..off+33]);
     return tmp;
 }
+/// Copy 32 bytes starting at `off`; DeserializationFailed if out of range.
 fn as32(bytes: []const u8, off: usize) ![32]u8 {
     if (bytes.len < off + 32) return FrostError.DeserializationFailed;
     var tmp: [32]u8 = undefined;
@@ -201,7 +224,7 @@ fn as32(bytes: []const u8, off: usize) ![32]u8 {
     return tmp;
 }
 
-// ── Ops
+// Protocol operations (see each export for wire formats).
 
 /// trusted dealer keygen: out = [count u16 = n][count x SecretShare][PublicKeyPackage]
 export fn frost_keygen(t: u16, n: u16) i32 {
@@ -221,9 +244,9 @@ export fn frost_keygen(t: u16, n: u16) i32 {
     };
     const shares = result[0];
     var pubkey = result[1];
-    // NOTE: shares and pubkey are allocated by wasm_allocator internally.
-    // We intentionally do NOT free them here to avoid cross-allocator issues.
-    // In wasm, the entire memory is reclaimed when the module is unloaded.
+    // shares and pubkey are allocated by wasm_allocator internally and are
+    // intentionally not freed here (avoid cross-allocator issues); wasm memory
+    // is reclaimed when the module is unloaded.
 
     var buf = std.ArrayList(u8).empty;
     errdefer buf.deinit(wasm_allocator);
@@ -467,9 +490,11 @@ export fn frost_reconstruct(kps_ptr: [*]const u8, kps_len: usize) i32 {
     return 0;
 }
 
-// ── DKG helpers: serialize/deserialize DKG internal packages
-// (dkg.zig uses wasm_allocator directly, so we manually free the heap fields)
+// DKG package serializers: (de)serialize dkg.zig internal packages to/from
+// wire blobs. dkg.zig uses wasm_allocator directly, so heap fields are freed
+// with freeRound1Secret / freeRound2Secret / freeRound1Package.
 
+/// Serialize a round-1 secret package: [id32][min u16][max u16][coeff_count u16][coeff_count x scalar32].
 fn serializeRound1Secret(s: *const dkg.round1.SecretPackage) ![]u8 {
     var buf = std.ArrayList(u8).empty;
     errdefer buf.deinit(wasm_allocator);
@@ -483,6 +508,9 @@ fn serializeRound1Secret(s: *const dkg.round1.SecretPackage) ![]u8 {
     return buf.toOwnedSlice(wasm_allocator);
 }
 
+/// Deserialize a round-1 secret package from the layout produced by
+/// serializeRound1Secret; reconstructs the coefficient commitments from the
+/// private coefficients.
 fn deserializeRound1Secret(bytes: []const u8) !dkg.round1.SecretPackage {
     if (bytes.len < 38) return FrostError.DeserializationFailed;
     const id = try Identifier.deserialize(bytes[0..32].*);
@@ -513,6 +541,7 @@ fn deserializeRound1Secret(bytes: []const u8) !dkg.round1.SecretPackage {
     };
 }
 
+/// Serialize a round-1 broadcast package: [coeff_count u16][count x 33][proof 65].
 fn serializeRound1Package(p: *const dkg.round1.Package) ![]u8 {
     var buf = std.ArrayList(u8).empty;
     errdefer buf.deinit(wasm_allocator);
@@ -524,6 +553,7 @@ fn serializeRound1Package(p: *const dkg.round1.Package) ![]u8 {
     return buf.toOwnedSlice(wasm_allocator);
 }
 
+/// Deserialize a round-1 broadcast package (inverse of serializeRound1Package).
 fn deserializeRound1Package(bytes: []const u8) !dkg.round1.Package {
     if (bytes.len < 2) return FrostError.DeserializationFailed;
     const coeff_count = std.mem.readInt(u16, bytes[0..2], .big);
@@ -544,6 +574,7 @@ fn deserializeRound1Package(bytes: []const u8) !dkg.round1.Package {
     };
 }
 
+/// Serialize a round-2 secret package: [id32][min u16][max u16][secret32][coeff_count u16][count x 33].
 fn serializeRound2Secret(s: *const dkg.round2.SecretPackage) ![]u8 {
     var buf = std.ArrayList(u8).empty;
     errdefer buf.deinit(wasm_allocator);
@@ -558,6 +589,7 @@ fn serializeRound2Secret(s: *const dkg.round2.SecretPackage) ![]u8 {
     return buf.toOwnedSlice(wasm_allocator);
 }
 
+/// Deserialize a round-2 secret package (inverse of serializeRound2Secret).
 fn deserializeRound2Secret(bytes: []const u8) !dkg.round2.SecretPackage {
     if (bytes.len < 70) return FrostError.DeserializationFailed;
     const id = try Identifier.deserialize(bytes[0..32].*);
@@ -581,7 +613,10 @@ fn deserializeRound2Secret(bytes: []const u8) !dkg.round2.SecretPackage {
     };
 }
 
-// DKG part1: out = [secret_len u16][secret][broadcast]
+/// DKG Part 1: sample a polynomial, commitment, and proof of knowledge for
+/// participant `id` (must be >= 1). Out-slot:
+///   [secret_len u16 BE][secret blob][broadcast blob]
+/// The secret blob is kept private; the broadcast blob is sent to all others.
 export fn frost_dkg_part1(id: u16, t: u16, n: u16) i32 {
     if (t < 2 or n < 2 or t > n) {
         out_set(&.{}, @intFromEnum(WasmError.invalid_min_signers));
@@ -632,7 +667,14 @@ export fn frost_dkg_part1(id: u16, t: u16, n: u16) i32 {
     return 0;
 }
 
-// DKG part2: in = secret_blob + broadcasts_blob; out = [secret2_len][secret2][count][(id|share)] or cheaters
+/// DKG Part 2: verify all n-1 received round-1 broadcasts (excluding self),
+/// then compute the share for each other participant. Inputs:
+///   secret      — own part1 secret blob
+///   broadcasts  — [count u16][count x (id32 | round1_package)]
+///                  (n-1 entries, self excluded)
+/// On success (rc=0) the out-slot is:
+///   [secret2_len u16][secret2][count u16][count x (id32 | share32)]
+/// On identifiable abort (rc>0): [count u16][count x id32] of cheaters.
 export fn frost_dkg_part2(
     secret_ptr: [*]const u8, secret_len: usize,
     broadcasts_ptr: [*]const u8, broadcasts_len: usize,
@@ -757,7 +799,15 @@ export fn frost_dkg_part2(
     }
 }
 
-// DKG part3: in = secret2_blob + r1_blob + r2_blob; out = [KeyPackage132][PublicKeyPackage] or cheaters
+/// DKG Part 3: verify received round-2 shares against senders' round-1
+/// commitments, sum them into the long-lived signing share, and derive the
+/// group public key. Inputs:
+///   secret2 — own part2 secret blob
+///   r1      — [count u16][count x (id32 | round1_package)]  (self excluded)
+///   r2      — [count u16][count x (id32 | share32)] keyed by SENDER id
+///             (self excluded; each entry is the share you RECEIVED)
+/// On success (rc=0) the out-slot is: KeyPackage(132) ‖ PublicKeyPackage.
+/// On identifiable abort (rc>0): [count u16][count x id32] of cheaters.
 export fn frost_dkg_part3(
     secret2_ptr: [*]const u8, secret2_len: usize,
     r1_ptr: [*]const u8, r1_len: usize,

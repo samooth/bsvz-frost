@@ -1,4 +1,5 @@
-//! Demo: Trusted dealer keygen + 2-round FROST signing
+//! Demo: trusted-dealer keygen + 2-round FROST signing, end to end.
+//! Run with `zig build run`.
 const std = @import("std");
 const frost = @import("bsvz-frost");
 

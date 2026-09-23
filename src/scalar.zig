@@ -5,6 +5,7 @@ const std = @import("std");
 
 const Scalar = std.crypto.ecc.Secp256k1.scalar.Scalar;
 
+/// Interpret bytes as a scalar (panics on non-canonical; callers pre-reduce).
 fn parse(bytes: [32]u8) Scalar {
     return Scalar.fromBytes(bytes, .big) catch unreachable;
 }

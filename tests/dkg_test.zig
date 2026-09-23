@@ -14,6 +14,8 @@ const DkgResult = struct {
     pubkey_package: frost.PublicKeyPackage,
 };
 
+/// Drive part1/part2/part3 for all participants and return the resulting key
+/// packages and public key package. Caller owns pubkey_package's map.
 fn runDkg(max_signers: u16, min_signers: u16) !DkgResult {
     const identifiers = try frost.keys.defaultIdentifiers(max_signers);
     defer std.heap.page_allocator.free(identifiers);

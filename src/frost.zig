@@ -93,10 +93,14 @@ pub const FrostParticipant = struct {
 /// Result of `runFullDkg`: every signer plus the group public key package
 /// all participants agreed on. Call `deinit` when done.
 pub const DkgCeremony = struct {
+    /// Allocator that owns participants and the public key package.
     allocator: std.mem.Allocator,
+    /// One participant per identifier, in input order.
     participants: []*FrostParticipant,
+    /// The agreed group verifying key and all verifying shares.
     public_key_package: keys.PublicKeyPackage,
 
+    /// Free all participants and the public key package.
     pub fn deinit(self: *DkgCeremony) void {
         for (self.participants) |p| p.deinit();
         self.allocator.free(self.participants);

@@ -1,4 +1,9 @@
-//! FROST Round 2: signature share generation
+//! FROST Round 2: signature share generation.
+//!
+//! Given the coordinator's SigningPackage (all participants' Round 1
+//! commitments + message), each participant computes binding factors, the
+//! group commitment, the Schnorr challenge, and its individual signature
+//! share. The coordinator then aggregates the shares.
 const std = @import("std");
 const FrostError = @import("error.zig").FrostError;
 const Identifier = @import("identifier.zig").Identifier;
@@ -9,27 +14,35 @@ const group = @import("group.zig");
 const cs = @import("ciphersuite.zig");
 const Signature = @import("signature.zig").Signature;
 
-/// A participant's signature share.
+/// A participant's signature share z_i (32-byte scalar on the wire).
 pub const SignatureShare = struct {
+    /// The response scalar share.
     share: field.Scalar,
 
+    /// Wrap an existing scalar.
     pub fn new(scalar: field.Scalar) SignatureShare {
         return SignatureShare{ .share = scalar };
     }
 
+    /// Unwrap the raw scalar.
     pub fn toScalar(self: SignatureShare) field.Scalar {
         return self.share;
     }
 
+    /// Serialize to 32 big-endian bytes.
     pub fn serialize(self: SignatureShare) [32]u8 {
         return field.scalarSerialize(self.share);
     }
 
+    /// Parse 32 bytes; rejects non-canonical encodings.
     pub fn deserialize(bytes: [32]u8) !SignatureShare {
         const s = try field.scalarDeserialize(bytes);
         return SignatureShare{ .share = s };
     }
 
+    /// Verify this share against the group commitment share, verifying share,
+    /// Lagrange coefficient, and challenge: check g^{z_i} ==
+    /// R_i + (λ_i · c) · Y_i. Returns InvalidSignatureShare on failure.
     pub fn verify(
         self: SignatureShare,
         _: Identifier,
@@ -48,22 +61,29 @@ pub const SignatureShare = struct {
     }
 };
 
-/// SigningPackage: coordinator distributes this to participants.
+/// The coordinator's signing package: all Round 1 commitments + the message.
+/// Distributed to every participant before Round 2.
 pub const SigningPackage = struct {
+    /// Map of participant identifier → published Round 1 commitments.
     signing_commitments: std.AutoHashMap(Identifier, round1.SigningCommitments),
+    /// The message being signed (borrowed slice — keep alive while in use).
     message: []const u8,
 
+    /// Wrap a commitments map and message (map ownership stays with caller).
     pub fn new(signing_commitments: std.AutoHashMap(Identifier, round1.SigningCommitments), message: []const u8) SigningPackage {
         return SigningPackage{ .signing_commitments = signing_commitments, .message = message };
     }
 
+    /// Look up one participant's commitments, if present.
     pub fn signingCommitment(self: SigningPackage, identifier: Identifier) ?round1.SigningCommitments {
         return self.signing_commitments.get(identifier);
     }
 
-    /// Wire format: count(2) ‖ [encodeGroupCommitments bytes] ‖ msg_len(4) ‖ msg.
-    /// Matches the canonical H5 encoding; `message` is borrowed from the
-    /// input buffer — callers must keep it alive until the package is used.
+    /// Wire format: count(2, BE) ‖ [encodeGroupCommitments bytes] ‖
+    /// msg_len(4, BE) ‖ msg. Each participant entry is id(32) ‖
+    /// commitments(66) = 98 bytes. Matches the canonical H5 encoding.
+    /// `message` is a borrowed slice from the input buffer — callers must
+    /// keep the input alive until the package is used.
     pub fn serialize(self: SigningPackage, allocator: std.mem.Allocator) ![]u8 {
         var buf = std.ArrayList(u8).empty;
         errdefer buf.deinit(allocator);
@@ -80,6 +100,7 @@ pub const SigningPackage = struct {
         return buf.toOwnedSlice(allocator);
     }
 
+    /// Parse the wire format produced by serialize; rejects truncated input.
     pub fn deserialize(allocator: std.mem.Allocator, bytes: []const u8) !SigningPackage {
         if (bytes.len < 6) return FrostError.DeserializationFailed;
         const count = std.mem.readInt(u16, bytes[0..2], .big);
@@ -115,10 +136,8 @@ pub const SigningPackage = struct {
     }
 
     /// Compute the raw binding factor preimages (inputs to H1) for each
-    /// participant, following `SigningPackage::binding_factor_preimages` in
-    /// the reference implementation:
-    ///
-    ///     serialize(VK) || H4(msg) || H5(encoded_commitments) || serialize(id)
+    /// participant: serialize(VK) ‖ H4(msg) ‖ H5(encoded_commitments) ‖
+    /// serialize(id). Free each returned value with the same allocator.
     pub fn bindingFactorPreimages(
         self: SigningPackage,
         verifying_key: *const keys.VerifyingKey,
@@ -145,7 +164,8 @@ pub const SigningPackage = struct {
     }
 };
 
-/// Compute binding factor list.
+/// Compute the binding factor for each participant: rho_i = H1(preimage_i).
+/// The map's values must be freed by the caller.
 pub fn computeBindingFactorList(
     signing_package: *const SigningPackage,
     verifying_key: *const keys.VerifyingKey,
@@ -166,7 +186,8 @@ pub fn computeBindingFactorList(
     return result;
 }
 
-/// Compute group commitment.
+/// Compute the group commitment R = Σ (R_hiding,i + ρ_i · R_binding,i).
+/// Rejects identity commitments and missing binding factors.
 pub fn computeGroupCommitment(signing_package: *const SigningPackage, binding_factor_list: *const std.AutoHashMap(Identifier, field.Scalar)) !group.Element {
     var group_commitment = group.identity();
     var it = signing_package.signing_commitments.iterator();
@@ -183,7 +204,7 @@ pub fn computeGroupCommitment(signing_package: *const SigningPackage, binding_fa
     return group_commitment;
 }
 
-/// Compute signature share.
+/// z_i = (hiding + binding·ρ_i) + λ_i · x_i · c  (the core share equation).
 fn computeSignatureShare(
     signer_nonces: *const round1.SigningNonces,
     binding_factor: field.Scalar,
@@ -204,7 +225,8 @@ fn computeSignatureShare(
     return SignatureShare.new(z_share);
 }
 
-/// Collect the identifiers participating in a signing session.
+/// Collect the identifiers participating in a signing session (hash-map key
+/// order; callers that need determinism sort separately).
 pub fn participatingIdentifiers(signing_package: *const SigningPackage, allocator: std.mem.Allocator) ![]Identifier {
     var list = std.ArrayList(Identifier).empty;
     defer list.deinit(allocator);
@@ -215,7 +237,10 @@ pub fn participatingIdentifiers(signing_package: *const SigningPackage, allocato
     return list.toOwnedSlice(allocator);
 }
 
-/// Round 2: sign.
+/// Round 2: produce this participant's signature share. Validates that the
+/// package has enough commitments, that our own commitment matches what we
+/// published in Round 1, then computes binding factors, the group
+/// commitment, the challenge, and z_i.
 pub fn sign(
     signing_package: *const SigningPackage,
     signer_nonces: *const round1.SigningNonces,

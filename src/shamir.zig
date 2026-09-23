@@ -3,6 +3,7 @@
 const std = @import("std");
 const scalar = @import("scalar.zig");
 
+/// A single Shamir share: 1-based participant index and the share value.
 pub const Share = struct {
     index: u32, // 1-based participant identifier
     value: [32]u8, // big-endian scalar mod the curve order

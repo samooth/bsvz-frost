@@ -10,7 +10,7 @@ pub fn build(b: *std.Build) void {
     });
     const bsvz_mod = bsvz_dep.module("bsvz");
 
-    // Module principal
+    // Main library module
     const frost_mod = b.addModule("bsvz-frost", .{
         .root_source_file = b.path("src/lib.zig"),
         .target = target,
@@ -18,7 +18,7 @@ pub fn build(b: *std.Build) void {
     });
     frost_mod.addImport("bsvz", bsvz_mod);
 
-    // Ejecutable de tests/demo
+    // Demo / test executable
     const exe_mod = b.createModule(.{
         .root_source_file = b.path("src/demo.zig"),
         .target = target,

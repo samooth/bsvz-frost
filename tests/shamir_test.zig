@@ -1,3 +1,5 @@
+//! Integration tests for Shamir secret sharing split/reconstruct on the real
+//! bsvz scalar backend (2-of-3 and 3-of-5 thresholds).
 const std = @import("std");
 const frost = @import("bsvz-frost");
 

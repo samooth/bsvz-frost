@@ -9,6 +9,8 @@ const frost = @import("bsvz-frost");
 
 const allocator = std.testing.allocator;
 
+/// Helper: trusted-dealer keygen for a (max, min) threshold; caller owns
+/// key_packages (deinit) and pubkeys.verifying_shares.
 const TestKeygen = struct {
     key_packages: []frost.KeyPackage,
     pubkeys: frost.PublicKeyPackage,
@@ -20,6 +22,7 @@ const TestKeygen = struct {
     }
 };
 
+/// Run trusted-dealer keygen for (max_signers, min_signers).
 fn testKeygen(max_signers: u16, min_signers: u16) !TestKeygen {
     const identifiers = try frost.keys.defaultIdentifiers(max_signers);
     defer std.heap.page_allocator.free(identifiers);
@@ -50,6 +53,8 @@ const Session = struct {
     }
 };
 
+/// Build a full session (commitments + signing package + signature shares)
+/// for the given key packages and message.
 fn startSession(
     key_packages: []const frost.KeyPackage,
     message: []const u8,
@@ -75,6 +80,7 @@ fn startSession(
     return .{ .commitments = commitments, .signing_package = signing_package, .nonces = nonces, .signature_shares = signature_shares };
 }
 
+/// Increment a signature share by 1 (simulates a bad/malicious share).
 fn tamper(sig: frost.SignatureShare) frost.SignatureShare {
     const s = sig.toScalar();
     const one = frost.field.scalarOne();

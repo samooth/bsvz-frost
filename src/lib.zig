@@ -9,34 +9,35 @@
 
 const std = @import("std");
 
-// Public API re-exports
+// Public API re-exports.
 pub const Error = @import("error.zig").FrostError;
 pub const Identifier = @import("identifier.zig").Identifier;
 pub const Signature = @import("signature.zig").Signature;
 
-// Ciphersuite
+// Ciphersuite (context string and H1-H5 / HDKG / HID hashes).
 pub const Ciphersuite = @import("ciphersuite.zig");
 pub const CONTEXT_STRING = Ciphersuite.CONTEXT_STRING;
 
-// Field & Group primitives
+// Field and group primitives (scalars and curve points).
 pub const field = @import("field.zig");
 pub const group = @import("group.zig");
 
-// bsvz-interop byte scalars and threshold primitives built on bsvz.crypto
+// bsvz-interop byte scalars and threshold primitives built on bsvz.crypto.
 pub const scalar = @import("scalar.zig");
 pub const shamir = @import("shamir.zig");
 /// ⚠ Naive threshold Schnorr — NO binding factors, NO identifiable abort.
-/// Evaluation/interop only; never use with real keys. See its module docs.
+/// Evaluation/interop only; never use with real keys. See the module docs
+/// for the full security warning.
 pub const naive = @import("naive.zig");
 pub const Share = shamir.Share;
 
-// High-level FROST participant state machine (RFC 9591 two-round ceremony)
+// High-level FROST participant state machine (RFC 9591 two-round ceremony).
 pub const frost = @import("frost.zig");
 pub const FrostParticipant = frost.FrostParticipant;
 pub const DkgCeremony = frost.DkgCeremony;
 pub const runFullDkg = frost.runFullDkg;
 
-// Keys module
+// Key generation, shares, and packages.
 pub const keys = @import("keys.zig");
 pub const SigningKey = keys.SigningKey;
 pub const VerifyingKey = keys.VerifyingKey;
@@ -48,10 +49,10 @@ pub const PublicKeyPackage = keys.PublicKeyPackage;
 pub const VerifiableSecretSharingCommitment = keys.VerifiableSecretSharingCommitment;
 pub const CoefficientCommitment = keys.CoefficientCommitment;
 
-// Distributed key generation (FROST KeyGen)
+// Distributed key generation (FROST KeyGen, part1/part2/part3).
 pub const dkg = @import("dkg.zig");
 
-// Round 1
+// Round 1: nonces and commitments.
 pub const round1 = @import("round1.zig");
 pub const Nonce = round1.Nonce;
 pub const NonceCommitment = round1.NonceCommitment;
@@ -59,12 +60,12 @@ pub const SigningNonces = round1.SigningNonces;
 pub const SigningCommitments = round1.SigningCommitments;
 pub const GroupCommitmentShare = round1.GroupCommitmentShare;
 
-// Round 2
+// Round 2: signing package and signature shares.
 pub const round2 = @import("round2.zig");
 pub const SignatureShare = round2.SignatureShare;
 pub const SigningPackage = round2.SigningPackage;
 
-// Aggregation
+// Aggregation and optional cheater detection.
 pub const aggregate = @import("aggregate.zig");
 pub const CheaterDetection = aggregate.CheaterDetection;
 

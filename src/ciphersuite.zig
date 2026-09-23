@@ -1,10 +1,15 @@
-//! FROST(secp256k1, SHA-256) ciphersuite implementation
+//! FROST(secp256k1, SHA-256) ciphersuite implementation.
+//!
+//! Defines the context string and the H1-H5 / HDKG / HID hash functions from
+//! RFC 9591, built on RFC 9380 hash_to_field (expand_message_xmd with SHA-256)
+//! to match the Zcash Foundation reference implementation byte-for-byte.
 const std = @import("std");
 const Secp256k1 = std.crypto.ecc.Secp256k1;
 
+/// Domain separation context for this ciphersuite.
 pub const CONTEXT_STRING = "FROST-secp256k1-SHA256-v1";
 
-/// Hash arbitrary data to a 32-byte output using SHA-256.
+/// Hash concatenated segments to a 32-byte SHA-256 output.
 fn hashToArraySegments(segments: []const []const u8) [32]u8 {
     var h = std.crypto.hash.sha2.Sha256.init(.{});
     for (segments) |segment| {
@@ -15,7 +20,7 @@ fn hashToArraySegments(segments: []const []const u8) [32]u8 {
     return out;
 }
 
-/// Hash arbitrary data to a 32-byte output using SHA-256.
+/// Hash multiple input segments to a 32-byte SHA-256 output.
 fn hashToArray(inputs: []const []const u8) [32]u8 {
     return hashToArraySegments(inputs);
 }
@@ -70,37 +75,37 @@ fn hashToScalar(domain: []const []const u8, msg: []const u8) Secp256k1.scalar.Sc
     return Secp256k1.scalar.Scalar.fromBytes48(uniform_bytes, .big);
 }
 
-/// H1: binding factor hash
+/// H1: binding factor hash (hash_to_field with DST = CTX ‖ "rho").
 pub fn H1(msg: []const u8) Secp256k1.scalar.Scalar {
     return hashToScalar(&[_][]const u8{ CONTEXT_STRING, "rho" }, msg);
 }
 
-/// H2: challenge hash
+/// H2: Schnorr challenge hash (DST = CTX ‖ "chal").
 pub fn H2(msg: []const u8) Secp256k1.scalar.Scalar {
     return hashToScalar(&[_][]const u8{ CONTEXT_STRING, "chal" }, msg);
 }
 
-/// H3: nonce hash
+/// H3: nonce derivation hash (DST = CTX ‖ "nonce").
 pub fn H3(msg: []const u8) Secp256k1.scalar.Scalar {
     return hashToScalar(&[_][]const u8{ CONTEXT_STRING, "nonce" }, msg);
 }
 
-/// H4: message hash
+/// H4: message hash (SHA-256 with DST = CTX ‖ "msg"), 32-byte output.
 pub fn H4(msg: []const u8) [32]u8 {
     return hashToArray(&[_][]const u8{ CONTEXT_STRING, "msg", msg });
 }
 
-/// H5: commitment list hash
+/// H5: commitment list hash (SHA-256 with DST = CTX ‖ "com"), 32-byte output.
 pub fn H5(msg: []const u8) [32]u8 {
     return hashToArray(&[_][]const u8{ CONTEXT_STRING, "com", msg });
 }
 
-/// HDKG: DKG hash
+/// HDKG: DKG challenge hash (DST = CTX ‖ "dkg").
 pub fn HDKG(msg: []const u8) Secp256k1.scalar.Scalar {
     return hashToScalar(&[_][]const u8{ CONTEXT_STRING, "dkg" }, msg);
 }
 
-/// HID: identifier derivation hash
+/// HID: identifier derivation hash (DST = CTX ‖ "id").
 pub fn HID(msg: []const u8) Secp256k1.scalar.Scalar {
     return hashToScalar(&[_][]const u8{ CONTEXT_STRING, "id" }, msg);
 }

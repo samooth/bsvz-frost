@@ -1,10 +1,15 @@
 //! Interop test against the official ZcashFoundation/frost-secp256k1 test
 //! vectors (tests/helpers/vectors.json in the frost repo).
+//!
+//! Verifies byte-for-byte agreement of nonces, commitments, binding factors,
+//! signature shares, and the final aggregate signature with the reference
+//! implementation's published fixtures.
 const std = @import("std");
 const frost = @import("bsvz-frost");
 
 const allocator = std.testing.allocator;
 
+/// Decode a hex string of length 2*n into an n-byte array.
 fn fromHex(comptime n: usize, s: []const u8) [n]u8 {
     var out: [n]u8 = undefined;
     for (0..n) |i| {
@@ -13,6 +18,7 @@ fn fromHex(comptime n: usize, s: []const u8) [n]u8 {
     return out;
 }
 
+/// Assert that `actual` equals the hex-decoded expected value.
 fn expectHex(comptime n: usize, s: []const u8, actual: []const u8) !void {
     const expected = fromHex(n, s);
     try std.testing.expectEqualSlices(u8, &expected, actual);

@@ -20,13 +20,19 @@ const bsvz = @import("bsvz");
 const scalar = @import("scalar.zig");
 
 pub const PartialSignature = struct {
+    /// Participant index (1-based).
     identifier: u32,
-    R: bsvz.crypto.Point, // nonce commitment
-    s: [32]u8, // partial response
+    /// Nonce commitment R_j (group element).
+    R: bsvz.crypto.Point,
+    /// Partial response scalar s_j.
+    s: [32]u8,
 };
 
+/// An aggregated naive Schnorr signature (R, s).
 pub const Signature = struct {
+    /// Group nonce commitment R.
     R: bsvz.crypto.Point,
+    /// Aggregated response scalar s.
     s: [32]u8,
 };
 

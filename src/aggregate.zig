@@ -1,4 +1,8 @@
-//! FROST signature aggregation and verification
+//! FROST signature aggregation and verification.
+//!
+//! Sums the participants' signature shares into a single Schnorr signature
+//! (R, z) and optionally runs identifiable-abort cheater detection when the
+//! aggregate fails to verify.
 const std = @import("std");
 const FrostError = @import("error.zig").FrostError;
 const Identifier = @import("identifier.zig").Identifier;
@@ -9,13 +13,22 @@ const field = @import("field.zig");
 const group = @import("group.zig");
 const Signature = @import("signature.zig").Signature;
 
+/// Cheater-detection mode for aggregation on failure.
 pub const CheaterDetection = enum {
+    /// Do not run share-level checks; fail with InvalidSignature only.
     disabled,
+    /// On failure, verify shares until the first bad one, then abort.
     first_cheater,
+    /// On failure, verify every share and report all bad ones.
     all_cheaters,
 };
 
-/// Aggregate signature shares into final Schnorr signature.
+/// Aggregate signature shares into the final Schnorr signature.
+///
+/// Checks that every commitment has a matching share and that the count
+/// meets the threshold, sums z_i, builds R from the binding factors, and
+/// verifies the result. On failure with cheater detection enabled, runs
+/// share-level verification to identify the culprit(s).
 pub fn aggregate(
     signing_package: *const round2.SigningPackage,
     signature_shares: std.AutoHashMap(Identifier, round2.SignatureShare),
@@ -28,7 +41,8 @@ pub fn aggregate(
     if (pubkeys.min_signers) |min| {
         if (signature_shares.count() < min) return FrostError.IncorrectNumberOfShares;
     }
-    // Check all identifiers present
+    // Every commitment must have a corresponding share (and verifying share
+    // when cheater detection is enabled).
     var sc_it = signing_package.signing_commitments.iterator();
     while (sc_it.next()) |entry| {
         if (!signature_shares.contains(entry.key_ptr.*)) return FrostError.UnknownIdentifier;
@@ -39,14 +53,14 @@ pub fn aggregate(
     var binding_factor_list = try round2.computeBindingFactorList(signing_package, &pubkeys.verifying_key, std.heap.page_allocator);
     defer binding_factor_list.deinit();
     const group_commitment = try round2.computeGroupCommitment(signing_package, &binding_factor_list);
-    // Sum signature shares
+    // Sum signature shares: z = Σ z_i.
     var z = field.scalarZero();
     var ss_it = signature_shares.iterator();
     while (ss_it.next()) |entry| {
         z = field.scalarAdd(z, entry.value_ptr.*.toScalar());
     }
     const signature = Signature{ .R = group_commitment, .z = z };
-    // Verify aggregate signature
+    // Verify the aggregate signature.
     const verification_result = pubkeys.verifying_key.verify(signing_package.message, signature);
     switch (cheater_detection) {
         .disabled => {
@@ -61,7 +75,7 @@ pub fn aggregate(
     return signature;
 }
 
-/// Simple aggregate without cheater detection.
+/// Aggregate without cheater detection (fail fast on invalid signature).
 pub fn aggregateSimple(
     signing_package: *const round2.SigningPackage,
     signature_shares: std.AutoHashMap(Identifier, round2.SignatureShare),
@@ -70,6 +84,9 @@ pub fn aggregateSimple(
     return aggregate(signing_package, signature_shares, pubkeys, .disabled);
 }
 
+/// On aggregate failure, verify each signature share individually and
+/// collect the identifier(s) whose share does not check out. Returns
+/// InvalidSignatureShare if any culprit was found, else InvalidSignature.
 fn detectCheater(
     signing_package: *const round2.SigningPackage,
     signature_shares: std.AutoHashMap(Identifier, round2.SignatureShare),
@@ -108,7 +125,8 @@ fn detectCheater(
     return FrostError.InvalidSignature;
 }
 
-/// Verify a single signature share.
+/// Verify a single signature share against the signing package without
+/// aggregating. Useful for pre-aggregation checks.
 pub fn verifySignatureShare(
     identifier: Identifier,
     verifying_share: *const keys.VerifyingShare,

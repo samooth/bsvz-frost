@@ -1,4 +1,6 @@
-//! bsvz-frost unit tests
+//! bsvz-frost unit tests: identifiers, keys, serialization, DKG, and the
+//! full two-round signing ceremony. Integration/interop/fuzz tests live in
+//! the top-level `tests/` directory.
 const std = @import("std");
 const frost = @import("bsvz-frost");
 const bsvz = @import("bsvz");

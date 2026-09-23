@@ -1,3 +1,6 @@
+//! Integration tests for the naive threshold Schnorr scheme on the real bsvz
+//! secp256k1 backend. Complements the FROST tests by exercising the
+//! evaluation-only naive path (see its module security warning).
 const std = @import("std");
 const bsvz = @import("bsvz");
 const frost = @import("bsvz-frost");

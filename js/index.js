@@ -1,8 +1,9 @@
 // bsvz-frost — WebAssembly module loader and JS API for FROST threshold signatures.
 //
-// The Zig shim (src/wasm.zig) exposes a C-ABI over pointer/length pairs into
-// the module's linear memory. After each operation, JS reads the result from
-// the out-slot (frost_out_ptr/len) and checks frost_out_err for errors.
+// The Zig WASM shim exposes a C-ABI over pointer/length pairs into the
+// module's linear memory. After each operation, JS reads the result from the
+// out-slot (frost_out_ptr/len) and checks frost_out_err for errors; results
+// must be copied out before the next operation overwrites the slot.
 //
 // All crypto operations are synchronous and single-threaded.
 
@@ -14,6 +15,8 @@ const NONCES_LEN = 64;
 const COMMITMENTS_LEN = 66;
 const SIGNING_PACKAGE_OVERHEAD = 6;
 
+// Stable error codes mirroring the WASM WasmError enum (never renumber;
+// only append). See the WASM module docs for the full ABI.
 export const ErrorCode = Object.freeze({
   OK: 0,
   INVALID_MIN_SIGNERS: 1,
@@ -47,6 +50,7 @@ export const ErrorCode = Object.freeze({
   UNKNOWN: 127,
 });
 
+// Thrown for any non-zero WASM status; `code` is an ErrorCode value.
 export class FrostError extends Error {
   constructor(code, message) {
     super(message);
@@ -55,6 +59,7 @@ export class FrostError extends Error {
   }
 }
 
+// Load the bundled bsvz_frost.wasm (Node: readFileSync; browser: fetch).
 async function defaultWasmBytes() {
   const url = new URL('./bsvz_frost.wasm', import.meta.url);
   if (typeof process !== 'undefined' && process.versions?.node) {
@@ -68,6 +73,7 @@ async function defaultWasmBytes() {
   return new Uint8Array(await res.arrayBuffer());
 }
 
+// Coerce a bigint/number/Uint8Array to a fixed-length big-endian byte array.
 function bytesOf(v, len, what) {
   if (typeof v === 'bigint' || typeof v === 'number') {
     const hex = BigInt.asUintN(len * 8, typeof v === 'number' ? BigInt(v) : v)
@@ -84,6 +90,7 @@ function bytesOf(v, len, what) {
   throw new TypeError(`bsvz-frost: ${what} must be a bigint or Uint8Array`);
 }
 
+// Host CSPRNG for seeding the module (used by seed() with no argument).
 function randomBytes(n) {
   if (!globalThis.crypto?.getRandomValues) {
     throw new Error('bsvz-frost: global crypto.getRandomValues unavailable; pass entropy to seed()');
@@ -91,10 +98,12 @@ function randomBytes(n) {
   return globalThis.crypto.getRandomValues(new Uint8Array(n));
 }
 
+// Hex-encode bytes (used in identifiable-abort error messages).
 function hex(buf) {
   return Array.from(buf, (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
+// Instantiate the WASM module and return the high-level FrostApi.
 export async function createFrost({ wasmBytes } = {}) {
   const bytes = wasmBytes ?? (await defaultWasmBytes());
   const { instance } = await WebAssembly.instantiate(bytes, {});
@@ -114,24 +123,26 @@ export async function createFrost({ wasmBytes } = {}) {
     if (rc !== 0) throw frostError(rc);
   }
 
+  // Copy the out-slot into a fresh ArrayBuffer so the result survives
+  // subsequent WASM operations / memory growth.
   function readOut() {
     const ptr = m.frost_out_ptr();
     const len = m.frost_out_len();
     const err = m.frost_out_err();
     if (err !== 0) throw frostError(err);
     if (len === 0) return new Uint8Array(0);
-    // Copy into a fresh ArrayBuffer so the result survives WASM memory growth.
     const src = memView().slice(ptr, ptr + len);
     return new Uint8Array(src);
   }
 
   // --- Key Management -------------------------------------------------------
 
+  // Trusted-dealer keygen. out = [n u16 BE][n × SecretShare(variable)][PublicKeyPackage].
+  // SecretShare length is 66 + coeff_count × 33, with coeff_count at bytes 64-65 of each share.
   const keygen = (t, n) => {
     const rc = m.frost_keygen(t, n);
     if (rc !== 0) throw frostError(rc);
     const out = readOut();
-    // out = [n u16][n x SecretShare(variable)][PublicKeyPackage]
     const count = (out[0] << 8) | out[1];
     const shares = [];
     let off = 2;
@@ -145,6 +156,7 @@ export async function createFrost({ wasmBytes } = {}) {
     return { shares, publicKeyPackage };
   };
 
+  // Derive a KeyPackage (132 bytes) from a SecretShare wire blob.
   const keypackageFromShare = (shareBytes) => {
     const ptr = m.frost_alloc(shareBytes.length);
     if (ptr === null) throw new Error('bsvz-frost: alloc failed');
@@ -157,6 +169,9 @@ export async function createFrost({ wasmBytes } = {}) {
 
   // --- Signing --------------------------------------------------------------
 
+  // Round 1: from a KeyPackage, generate secret nonces + public commitments.
+  // out = SigningNonces(64) ‖ SigningCommitments(66) = 130 bytes.
+  // Publish only `commitments`; keep `nonces` secret and single-use.
   const round1Commit = (keypackageBytes) => {
     if (keypackageBytes.length !== KEYPACKAGE_LEN) {
       throw new TypeError(`bsvz-frost: keypackage must be ${KEYPACKAGE_LEN} bytes`);
@@ -168,13 +183,14 @@ export async function createFrost({ wasmBytes } = {}) {
     m.frost_dealloc(ptr, KEYPACKAGE_LEN);
     if (rc !== 0) throw frostError(rc);
     const out = readOut();
-    // out = SigningNonces(64) + SigningCommitments(66) = 130 bytes
     return {
       nonces: new Uint8Array(out.slice(0, NONCES_LEN)),
       commitments: new Uint8Array(out.slice(NONCES_LEN)),
     };
   };
 
+  // Round 2: produce this signer's 32-byte SignatureShare from the signing
+  // package (built by the coordinator), the local nonces, and the KeyPackage.
   const round2Sign = (signingPackageBytes, noncesBytes, keypackageBytes) => {
     if (noncesBytes.length !== NONCES_LEN) {
       throw new TypeError(`bsvz-frost: nonces must be ${NONCES_LEN} bytes`);
@@ -199,9 +215,10 @@ export async function createFrost({ wasmBytes } = {}) {
     m.frost_dealloc(noncesPtr, NONCES_LEN);
     m.frost_dealloc(kpPtr, KEYPACKAGE_LEN);
     if (rc !== 0) throw frostError(rc);
-    return readOut(); // SignatureShare(32)
+    return readOut(); // SignatureShare (32 bytes)
   };
 
+  // Allocate a buffer in WASM linear memory for a byte array (empty → null ptr).
   function allocPtr(bytes) {
     if (bytes.length === 0) return 0;
     const p = m.frost_alloc(bytes.length);
@@ -209,6 +226,11 @@ export async function createFrost({ wasmBytes } = {}) {
     return p;
   }
 
+  // Aggregate signature shares into a 65-byte Signature.
+  // shares blob: [count u16 BE][count × (id32 ‖ share32)]
+  // cheaterMode: 0 = disabled, 1 = first cheater only, 2 = all cheaters.
+  // On identifiable abort the WASM layer returns a positive cheater count;
+  // this wrapper converts it into a FrostError with IDENTIFIABLE_ABORT.
   const aggregate = (signingPackageBytes, sharesBytes, publicKeyPackageBytes, cheaterMode = 0) => {
     const spPtr = allocPtr(signingPackageBytes);
     const sharesPtr = allocPtr(sharesBytes);
@@ -221,9 +243,11 @@ export async function createFrost({ wasmBytes } = {}) {
     if (sharesPtr !== 0) m.frost_dealloc(sharesPtr, sharesBytes.length);
     if (pkPtr !== 0) m.frost_dealloc(pkPtr, publicKeyPackageBytes.length);
     if (rc !== 0) throw frostError(rc);
-    return readOut(); // Signature(65)
+    return readOut(); // Signature (65 bytes)
   };
 
+  // Verify a signature. Returns true on success; throws FrostError otherwise
+  // (invalid signature, malformed key, etc.).
   const verify = (verifyingKeyBytes, message, signatureBytes) => {
     if (verifyingKeyBytes.length !== POINT_LEN) {
       throw new TypeError(`bsvz-frost: verifying key must be ${POINT_LEN} bytes`);
@@ -251,6 +275,8 @@ export async function createFrost({ wasmBytes } = {}) {
     return true;
   };
 
+  // Reconstruct the group signing key from ≥ t KeyPackages.
+  // Input blob: [count u16 BE][count × KeyPackage(132)] → 32-byte SigningKey.
   const reconstruct = (keypackagesBytes) => {
     const ptr = m.frost_alloc(keypackagesBytes.length);
     if (ptr === null) throw new Error('bsvz-frost: alloc failed');
@@ -258,17 +284,23 @@ export async function createFrost({ wasmBytes } = {}) {
     const rc = m.frost_reconstruct(ptr, keypackagesBytes.length);
     m.frost_dealloc(ptr, keypackagesBytes.length);
     if (rc !== 0) throw frostError(rc);
-    return readOut(); // SigningKey(32)
+    return readOut(); // SigningKey (32 bytes)
   };
 
   // --- DKG ------------------------------------------------------------------
 
+  // DKG Part 1 for participant `id` (1-based; 0 is invalid).
+  // Returns [secret_len u16 BE][secret][broadcast]; keep secret private.
   const dkgPart1 = (id, t, n) => {
     const rc = m.frost_dkg_part1(id, t, n);
     if (rc !== 0) throw frostError(rc);
-    return readOut(); // [secret_len u16][secret][broadcast]
+    return readOut();
   };
 
+  // DKG Part 2: verify n-1 received broadcasts (self excluded) and compute
+  // outgoing shares. On identifiable abort, throws FrostError with
+  // IDENTIFIABLE_ABORT and hex-encoded cheater ids in the message.
+  // Success out: [secret2_len u16][secret2][count u16][count × (id32 ‖ share32)].
   const dkgPart2 = (secretBytes, broadcastsBytes) => {
     const secretPtr = m.frost_alloc(secretBytes.length);
     const bcPtr = m.frost_alloc(broadcastsBytes.length);
@@ -283,7 +315,7 @@ export async function createFrost({ wasmBytes } = {}) {
     m.frost_dealloc(secretPtr, secretBytes.length);
     m.frost_dealloc(bcPtr, broadcastsBytes.length);
     if (rc > 0) {
-      // Identifiable abort: rc = cheater count, out-slot contains [count u16][count x id32]
+      // Identifiable abort: rc = cheater count; out-slot has [count u16][count × id32].
       const out = readOut();
       const count = (out[0] << 8) | out[1];
       const cheaters = [];
@@ -295,9 +327,13 @@ export async function createFrost({ wasmBytes } = {}) {
       throw new FrostError(ErrorCode.IDENTIFIABLE_ABORT, `cheaters: ${cheaters.map((c) => hex(c)).join(', ')}`);
     }
     if (rc < 0) throw frostError(rc);
-    return readOut(); // [secret2_len][secret2][count][(id32 | share32)]
+    return readOut();
   };
 
+  // DKG Part 3: verify received shares, sum into the long-lived share, and
+  // derive the final keys. r1/r2 exclude self; r2 entries are keyed by
+  // SENDER id. Success out: KeyPackage(132) ‖ PublicKeyPackage.
+  // On identifiable abort, throws with IDENTIFIABLE_ABORT (see dkgPart2).
   const dkgPart3 = (secret2Bytes, r1Bytes, r2Bytes) => {
     const s2Ptr = m.frost_alloc(secret2Bytes.length);
     const r1Ptr = m.frost_alloc(r1Bytes.length);
@@ -328,7 +364,6 @@ export async function createFrost({ wasmBytes } = {}) {
     }
     if (rc < 0) throw frostError(rc);
     const out = readOut();
-    // out = KeyPackage(132) + PublicKeyPackage
     const keypackage = out.slice(0, KEYPACKAGE_LEN);
     const publicKeyPackage = out.slice(KEYPACKAGE_LEN);
     return { keypackage, publicKeyPackage };
@@ -336,13 +371,17 @@ export async function createFrost({ wasmBytes } = {}) {
 
   // --- Lifecycle ------------------------------------------------------------
 
+  // Public FrostApi. All methods are synchronous; each call completes the
+  // corresponding WASM operation and returns/copies the result out-slot.
   const api = {
     version: () => {
       const ptr = m.frost_version();
       const len = new Uint8Array(m.memory.buffer, ptr).indexOf(0);
       return new TextDecoder().decode(read(ptr, len));
     },
-     seed(entropy) {
+    // Seed the module CSPRNG. With no argument, draws 64 bytes from the host
+    // crypto.getRandomValues. Must be called before keygen / DKG / nonce gen.
+    seed(entropy) {
       const bytes = entropy ?? randomBytes(64);
       if (!(bytes instanceof Uint8Array) || bytes.length === 0 || bytes.length > 64) {
         throw new TypeError('bsvz-frost: seed expects 1..64 bytes');
@@ -362,7 +401,7 @@ export async function createFrost({ wasmBytes } = {}) {
     dkgPart1,
     dkgPart2,
     dkgPart3,
-    // low-level access to the raw shim and linear memory
+    // Low-level access to raw WASM exports and linear memory.
     raw: m,
     memView,
     alloc: (len) => m.frost_alloc(len),

@@ -12,6 +12,7 @@ const frost = @import("bsvz-frost");
 
 const allocator = std.testing.allocator;
 
+/// Decode a hex string of length 2*n into an n-byte array.
 fn fromHex(comptime n: usize, s: []const u8) [n]u8 {
     var out: [n]u8 = undefined;
     for (0..n) |i| {
@@ -20,11 +21,13 @@ fn fromHex(comptime n: usize, s: []const u8) [n]u8 {
     return out;
 }
 
+/// Assert that `actual` equals the hex-decoded expected value.
 fn expectHex(comptime n: usize, s: []const u8, actual: []const u8) !void {
     const expected = fromHex(n, s);
     try std.testing.expectEqualSlices(u8, &expected, actual);
 }
 
+/// One participant's fixture data from vectors_dkg.json.
 const Vec = struct {
     identifier: u16,
     signing_key: []const u8,
@@ -36,6 +39,8 @@ const Vec = struct {
     signing_share: []const u8,
 };
 
+/// Embedded fixture rows for participants 1..=3 (t=2, n=3), taken from the
+/// official vectors_dkg.json.
 const vectors = [_]Vec{
     .{
         .identifier = 1,
@@ -87,6 +92,7 @@ const vectors = [_]Vec{
     },
 };
 
+/// Expected group verifying key shared by all three participants.
 const group_vk_hex = "037b5b0c4b6c91a16fb78499e8a74cc792f9ea79cb94860fcb90f801472930de47";
 
 test "Zcash frost-secp256k1 vectors_dkg.json byte-for-byte" {

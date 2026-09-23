@@ -1,12 +1,14 @@
 // Node smoke test for the bsvz-frost wasm module.
 //
-// Loads the module, runs a complete FROST signing session through the JS API,
-// and asserts correct behavior including negative cases.
+// Loads the module, runs a complete FROST signing session through the JS API
+// (trusted-dealer keygen, rounds 1-2, aggregation, verification, DKG), and
+// asserts correct behavior including negative cases.
+//
+// Usage: node run-node.mjs <path-to-bsvz-frost.wasm>
 
 import { readFileSync } from 'node:fs';
 import { createFrost, ErrorCode } from './index.js';
 
-// build.zig / npm test pass the artifact path as the last argument.
 const artifact = process.argv[process.argv.length - 1];
 
 const frost = await createFrost({ wasmBytes: readFileSync(artifact) });
