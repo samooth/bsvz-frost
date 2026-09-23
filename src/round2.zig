@@ -121,11 +121,11 @@ pub const SigningPackage = struct {
             try commitments.put(id, comm);
         }
         var tmp: [4]u8 = undefined;
-        @memcpy(tmp[0..], bytes.ptr[off..off+4]);
+        @memcpy(tmp[0..], bytes.ptr[off .. off + 4]);
         const msg_len = std.mem.readInt(u32, &tmp, .big);
         off += 4;
         if (bytes.len < off + msg_len) return FrostError.DeserializationFailed;
-        const message = bytes[off..off + msg_len]; // borrowed slice
+        const message = bytes[off .. off + msg_len]; // borrowed slice
         return SigningPackage{ .signing_commitments = commitments, .message = message };
     }
 

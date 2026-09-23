@@ -3,10 +3,12 @@
 //! ABI (stable across 0.1.x):
 //!   Memory:   frost_alloc / frost_dealloc  (wasm-managed, JS must free inputs)
 //!   Result:   frost_out_ptr / frost_out_len / frost_out_err  (last-op slot)
-//!   Ops:      return i32 status (0 = ok, <0 = error code, >0 = cheater count)
-//!             On ok: result bytes are in the out-slot; JS must copy before
-//!             the next op overwrites them. On identifiable abort (>0): the
-//!             out-slot contains [count u16][count x id32].
+//!   Ops:      return i32 status: 0 = ok; positive = WasmError code, except
+//!             for dkg_part2/part3 where a positive value with out_err == 0
+//!             is the identifiable-abort cheater count. On ok: result bytes
+//!             are in the out-slot; JS must copy before the next op
+//!             overwrites them. On identifiable abort: the out-slot contains
+//!             [count u16][count x id32] and out_err stays 0.
 //!
 //! Error codes are a stable ABI shared with the JS package (ErrorCode table
 //! in the JS API). Never renumber existing codes; only append new ones.
@@ -213,14 +215,14 @@ fn listAppendU32(buf: *std.ArrayList(u8), value: u32) !void {
 fn as33(bytes: []const u8, off: usize) ![33]u8 {
     if (bytes.len < off + 33) return FrostError.DeserializationFailed;
     var tmp: [33]u8 = undefined;
-    @memcpy(tmp[0..33], bytes[off..off+33]);
+    @memcpy(tmp[0..33], bytes[off .. off + 33]);
     return tmp;
 }
 /// Copy 32 bytes starting at `off`; DeserializationFailed if out of range.
 fn as32(bytes: []const u8, off: usize) ![32]u8 {
     if (bytes.len < off + 32) return FrostError.DeserializationFailed;
     var tmp: [32]u8 = undefined;
-    @memcpy(tmp[0..32], bytes[off..off+32]);
+    @memcpy(tmp[0..32], bytes[off .. off + 32]);
     return tmp;
 }
 
@@ -328,9 +330,12 @@ export fn frost_round1_commit(ptr: [*]const u8, len: usize) i32 {
 
 /// Round 2: in = SigningPackage(blob) + SigningNonces(64) + KeyPackage(132) → out = SignatureShare(32)
 export fn frost_round2_sign(
-    sp_ptr: [*]const u8, sp_len: usize,
-    nonces_ptr: [*]const u8, nonces_len: usize,
-    kp_ptr: [*]const u8, kp_len: usize,
+    sp_ptr: [*]const u8,
+    sp_len: usize,
+    nonces_ptr: [*]const u8,
+    nonces_len: usize,
+    kp_ptr: [*]const u8,
+    kp_len: usize,
 ) i32 {
     if (nonces_len != 64 or kp_len != 132) {
         out_set(&.{}, @intFromEnum(WasmError.deserialization_failed));
@@ -361,9 +366,12 @@ export fn frost_round2_sign(
 /// Aggregate: in = SigningPackage(blob) + shares blob + PublicKeyPackage(blob) + mode → out = Signature(65)
 /// shares blob: [count u16][count x (id32 | share32)]; mode: 0=disabled, 1=first_cheater, 2=all
 export fn frost_aggregate(
-    sp_ptr: [*]const u8, sp_len: usize,
-    shares_ptr: [*]const u8, shares_len: usize,
-    pk_ptr: [*]const u8, pk_len: usize,
+    sp_ptr: [*]const u8,
+    sp_len: usize,
+    shares_ptr: [*]const u8,
+    shares_len: usize,
+    pk_ptr: [*]const u8,
+    pk_len: usize,
     mode: u8,
 ) i32 {
     var sp = round2.SigningPackage.deserialize(wasm_allocator, sp_ptr[0..sp_len]) catch |err| {
@@ -430,9 +438,12 @@ export fn frost_aggregate(
 
 /// Verify: in = VerifyingKey(33) + message + Signature(65) → 0=valid, <0=error
 export fn frost_verify(
-    vk_ptr: [*]const u8, vk_len: usize,
-    msg_ptr: [*]const u8, msg_len: usize,
-    sig_ptr: [*]const u8, sig_len: usize,
+    vk_ptr: [*]const u8,
+    vk_len: usize,
+    msg_ptr: [*]const u8,
+    msg_len: usize,
+    sig_ptr: [*]const u8,
+    sig_len: usize,
 ) i32 {
     if (vk_len != 33 or sig_len != 65) {
         out_set(&.{}, @intFromEnum(WasmError.deserialization_failed));
@@ -676,8 +687,10 @@ export fn frost_dkg_part1(id: u16, t: u16, n: u16) i32 {
 ///   [secret2_len u16][secret2][count u16][count x (id32 | share32)]
 /// On identifiable abort (rc>0): [count u16][count x id32] of cheaters.
 export fn frost_dkg_part2(
-    secret_ptr: [*]const u8, secret_len: usize,
-    broadcasts_ptr: [*]const u8, broadcasts_len: usize,
+    secret_ptr: [*]const u8,
+    secret_len: usize,
+    broadcasts_ptr: [*]const u8,
+    broadcasts_len: usize,
 ) i32 {
     const r1_secret = deserializeRound1Secret(secret_ptr[0..secret_len]) catch |err| {
         out_set(&.{}, toWasm(err));
@@ -715,7 +728,7 @@ export fn frost_dkg_part2(
             out_set(&.{}, @intFromEnum(WasmError.deserialization_failed));
             return @intFromEnum(WasmError.deserialization_failed);
         }
-        const pkg = deserializeRound1Package(broadcasts_ptr[off..off+entry_len]) catch |err| {
+        const pkg = deserializeRound1Package(broadcasts_ptr[off .. off + entry_len]) catch |err| {
             out_set(&.{}, toWasm(err));
             return toWasm(err);
         };
@@ -793,7 +806,9 @@ export fn frost_dkg_part2(
                 return @intFromEnum(WasmError.randomness_error);
             };
             wasm_allocator.free(ids);
-            out_set(owned, @intCast(ids.len));
+            // Identifiable abort: rc = cheater count; out_err stays 0 so the
+            // host can read the cheater list from the out-slot.
+            out_set(owned, 0);
             return @intCast(ids.len);
         },
     }
@@ -809,9 +824,12 @@ export fn frost_dkg_part2(
 /// On success (rc=0) the out-slot is: KeyPackage(132) ‖ PublicKeyPackage.
 /// On identifiable abort (rc>0): [count u16][count x id32] of cheaters.
 export fn frost_dkg_part3(
-    secret2_ptr: [*]const u8, secret2_len: usize,
-    r1_ptr: [*]const u8, r1_len: usize,
-    r2_ptr: [*]const u8, r2_len: usize,
+    secret2_ptr: [*]const u8,
+    secret2_len: usize,
+    r1_ptr: [*]const u8,
+    r1_len: usize,
+    r2_ptr: [*]const u8,
+    r2_len: usize,
 ) i32 {
     const r2_secret = deserializeRound2Secret(secret2_ptr[0..secret2_len]) catch |err| {
         out_set(&.{}, toWasm(err));
@@ -849,7 +867,7 @@ export fn frost_dkg_part3(
             out_set(&.{}, @intFromEnum(WasmError.deserialization_failed));
             return @intFromEnum(WasmError.deserialization_failed);
         }
-        const pkg = deserializeRound1Package(r1_ptr[r1_off..r1_off+entry_len]) catch |err| {
+        const pkg = deserializeRound1Package(r1_ptr[r1_off .. r1_off + entry_len]) catch |err| {
             out_set(&.{}, toWasm(err));
             return toWasm(err);
         };
@@ -946,9 +964,10 @@ export fn frost_dkg_part3(
                 return @intFromEnum(WasmError.randomness_error);
             };
             wasm_allocator.free(ids);
-            out_set(owned, @intCast(ids.len));
+            // Identifiable abort: rc = cheater count; out_err stays 0 so the
+            // host can read the cheater list from the out-slot.
+            out_set(owned, 0);
             return @intCast(ids.len);
         },
     }
 }
-
